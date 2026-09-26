@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatex — Видеочат Рулетка</title>
+    <style>
+        :root {
+            --bg-main: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #0f172a 60%, #020617 100%);
+            --header-bg: rgba(15, 23, 42, 0.85);
+            --card-bg: #0f172a;
+            --card-border: #1e293b;
+            --text-primary: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-blue: #3b82f6;
+            --accent-green: #22c55e;
+            --accent-red: #ef4444;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background: var(--bg-main);
+            background-attachment: fixed;
+            color: var(--text-primary);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Заставка 18+ */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(2, 6, 23, 0.94);
+            backdrop-filter: blur(12px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+
+        .modal-card {
+            background: #0f172a;
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 32px;
+            max-width: 480px;
+            width: 90%;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .modal-badge {
+            align-self: center;
+            background: var(--accent-red);
+            color: #fff;
+            font-weight: bold;
+            font-size: 1.2rem;
+            padding: 6px 16px;
+            border-radius: 20px;
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+        }
+
+        .modal-title {
+            font-size: 1.4rem;
+            font-weight: bold;
+            color: var(--text-primary);
+        }
+
+        .modal-rules {
+            text-align: left;
+            background: rgba(2, 6, 23, 0.6);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            padding: 16px;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        .modal-rules ul {
+            padding-left: 20px;
+            margin-top: 10px;
+        }
+
+        .modal-rules li {
+            margin-bottom: 6px;
+        }
+
+        .modal-btn {
+            background: var(--accent-green);
+            color: #fff;
+            border: none;
+            padding: 16px 20px;
+            border-radius: 10px;
+            font-size: 1.05rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 4px 14px rgba(34, 197, 94, 0.3);
+        }
+
+        .modal-btn:hover {
+            background: #16a34a;
+            transform: translateY(-1px);
+        }
+
+        /* Шапка */
+        header {
+            height: 58px;
+            background: var(--header-bg);
+            backdrop-filter: blur(8px);
+            color: #fff;
+            padding: 0 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--card-border);
+            flex-shrink: 0;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.3rem;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+        }
+
+        .brand-icon {
+            background: var(--accent-blue);
+            color: #fff;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            box-shadow: 0 0 12px rgba(59, 130, 246, 0.5);
+        }
+
+        .header-meta {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .online-count {
+            color: #38bdf8;
+            font-weight: bold;
+        }
+
+        /* Главный контейнер */
+        .main-wrapper {
+            flex: 1;
+            display: flex;
+            gap: 20px;
+            padding: 20px;
+            max-width: 1600px;
+            width: 100%;
+            margin: 0 auto;
+            min-height: 0;
+        }
+
+        /* Левая колонка */
+        .left-column {
+            width: 520px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            height: 100%;
+        }
+
+        .videos-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            min-height: 0;
+        }
+
+        .video-window {
+            flex: 1;
+            width: 100%;
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            border: 1px solid var(--card-border);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            text-align: center;
+            position: relative;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: none;
+        }
+
+        .video-status {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            line-height: 1.5;
+            padding: 20px;
+            max-width: 85%;
+        }
+
+        /* Кнопки управления */
+        .control-buttons {
+            display: flex;
+            gap: 12px;
+            flex-shrink: 0;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 16px 0;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn:active {
+            transform: translateY(1px);
+        }
+
+        .btn-start {
+            background: var(--accent-green);
+        }
+        .btn-start:hover {
+            background: #16a34a;
+        }
+
+        .btn-stop {
+            background: var(--accent-red);
+        }
+        .btn-stop:hover {
+            background: #dc2626;
+        }
+
+        /* Правая колонка (Чат) */
+        .right-column {
+            flex: 1;
+            height: 100%;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .chat-header {
+            background: rgba(2, 6, 23, 0.5);
+            border-bottom: 1px solid var(--card-border);
+            padding: 14px 20px;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+
+        .chat-body {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            font-size: 0.95rem;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .msg-system {
+            color: #64748b;
+            font-size: 0.85rem;
+            font-style: italic;
+        }
+
+        .msg-text {
+            color: var(--text-primary);
+            word-break: break-word;
+            line-height: 1.4;
+        }
+
+        .chat-footer {
+            border-top: 1px solid var(--card-border);
+            padding: 14px;
+            background: rgba(2, 6, 23, 0.5);
+            flex-shrink: 0;
+        }
+
+        .input-wrapper {
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 12px 16px;
+            background: rgba(2, 6, 23, 0.6);
+            border: 1px solid var(--card-border);
+            color: #fff;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .chat-input:focus {
+            border-color: var(--accent-blue);
+        }
+
+        .send-btn {
+            padding: 0 24px;
+            background: var(--accent-blue);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .send-btn:hover {
+            background: #2563eb;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Модальное окно 18+ -->
+    <div class="modal-overlay" id="ageModal">
+        <div class="modal-card">
+            <div class="modal-badge">18+</div>
+            <div class="modal-title">Правила сервиса</div>
+            <div class="modal-rules">
+                Входя на сайт, вы подтверждаете правила сервиса:
+                <ul>
+                    <li>Вам исполнилось <strong>18 лет</strong>.</li>
+                    <li>Согласие на использование доступных медиаустройств.</li>
+                    <li>Запрещены проявления агрессии, спам и недопустимый контент.</li>
+                </ul>
+            </div>
+            <button class="modal-btn" id="acceptBtn">Войти на сайт</button>
+        </div>
+    </div>
+
+    <!-- Шапка -->
+    <header>
+        <div class="brand">
+            <div class="brand-icon">⚡</div>
+            <span>Chatex</span>
+        </div>
+        <div class="header-meta">
+            <span>Онлайн: <strong class="online-count">1</strong></span>
+        </div>
+    </header>
+
+    <!-- Основная область -->
+    <div class="main-wrapper">
+        <div class="left-column">
+            <div class="videos-container">
+                <div class="video-window">
+                    <video id="remoteVideo" autoplay playsinline></video>
+                    <div class="video-status" id="remoteStatus">Поиск не запущен. Нажмите «ДАЛЕЕ».</div>
+                </div>
+
+                <div class="video-window">
+                    <video id="localVideo" autoplay playsinline muted></video>
+                    <div class="video-status" id="localStatus">Определение устройств...</div>
+                </div>
+            </div>
+
+            <div class="control-buttons">
+                <button class="btn btn-start" id="nextBtn">ДАЛЕЕ</button>
+                <button class="btn btn-stop" id="stopBtn">СТОП</button>
+            </div>
+        </div>
+
+        <div class="right-column">
+            <div class="chat-header">Текстовый диалог</div>
+            
+            <div class="chat-body" id="chatBody">
+                <div class="msg-system">Подтвердите вход и нажмите «ДАЛЕЕ» для поиска реального собеседника.</div>
+            </div>
+
+            <div class="chat-footer">
+                <div class="input-wrapper">
+                    <input type="text" class="chat-input" id="chatInput" placeholder="Введите сообщение и нажмите Enter...">
+                    <button class="send-btn" id="sendBtn">Отправить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const ageModal = document.getElementById('ageModal');
+        const acceptBtn = document.getElementById('acceptBtn');
+        const localVideo = document.getElementById('localVideo');
+        const localStatus = document.getElementById('localStatus');
+        const remoteStatus = document.getElementById('remoteStatus');
+        
+        const nextBtn = document.getElementById('nextBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const chatBody = document.getElementById('chatBody');
+        const chatInput = document.getElementById('chatInput');
+        const sendBtn = document.getElementById('sendBtn');
+
+        let localStream = null;
+
+        acceptBtn.addEventListener('click', async () => {
+            ageModal.style.display = 'none';
+            await initMedia();
+        });
+
+        async function initMedia() {
+            try {
+                // Сканируем подключенные физические устройства
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const hasVideo = devices.some(device => device.kind === 'videoinput');
+                const hasAudio = devices.some(device => device.kind === 'audioinput');
+
+                if (!hasVideo && !hasAudio) {
+                    localStatus.innerText = "Камера и микрофон не обнаружены на данном ПК.";
+                    addSystemMsg("Устройства ввода (камера/микрофон) отсутствуют.");
+                    return;
+                }
+
+                // Запрашиваем только те устройства, которые физически есть
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: hasVideo,
+                    audio: hasAudio
+                });
+
+                if (hasVideo) {
+                    localVideo.srcObject = localStream;
+                    localVideo.style.display = 'block';
+                    localStatus.style.display = 'none';
+                    addSystemMsg("Камера и микрофон успешно подключены.");
+                } else {
+                    localStatus.innerText = "Камера не обнаружена (работает только микрофон).";
+                    addSystemMsg("Аудиоустройство подключено (без видеокамеры).");
+                }
+
+            } catch (err) {
+                console.error("Ошибка инициализации устройств:", err);
+                if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                    localStatus.innerText = "Доступ заблокирован в настройках браузера или ОС.";
+                    addSystemMsg("Предупреждение: Доступ к медиаустройствам отклонен.");
+                } else if (err.name === 'NotFoundError') {
+                    localStatus.innerText = "Камера или микрофон не найдены на ПК.";
+                    addSystemMsg("Устройства не обнаружены.");
+                } else {
+                    localStatus.innerText = "Камера не обнаружена (работает только микрофон).";
+                }
+            }
+        }
+
+        nextBtn.addEventListener('click', () => {
+            remoteStatus.innerText = "Ожидание подключения реального собеседника в сети...";
+            addSystemMsg("Поиск реального собеседника в очереди...");
+        });
+
+        stopBtn.addEventListener('click', () => {
+            remoteStatus.innerText = "Поиск остановлен.";
+            addSystemMsg("Вы остановили поиск.");
+        });
+
+        function sendMessage() {
+            const text = chatInput.value.trim();
+            if (text !== '') {
+                const msg = document.createElement('div');
+                msg.className = 'msg-text';
+                msg.innerHTML = `<strong>Вы:</strong> ${text}`;
+                chatBody.appendChild(msg);
+                chatInput.value = '';
+                chatBody.scrollTop = chatBody.scrollHeight;
+            }
+        }
+
+        sendBtn.addEventListener('click', sendMessage);
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        function addSystemMsg(text) {
+            const sys = document.createElement('div');
+            sys.className = 'msg-system';
+            sys.innerText = text;
+            chatBody.appendChild(sys);
+            chatBody.scrollTop = chatBody.scrollHeight;
+        }
+    </script>
+</body>
+</html>
