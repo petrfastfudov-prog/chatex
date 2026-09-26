@@ -1,9 +1,32 @@
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const { WebSocketServer } = require('ws');
 
-// Создаем WebSocket-сервер на порту 8080
-const wss = new WebSocketServer({ port: 8080 });
+// Render автоматически передает порт через process.env.PORT
+const PORT = process.env.PORT || 8080;
 
-let waitingUser = null; // Пользователь, ожидающий собеседника
+// 1. HTTP-сервер для отдачи index.html
+const server = http.createServer((req, res) => {
+    if (req.url === '/' || req.url === '/index.html') {
+        fs.readFile(path.join(__dirname, 'index.html'), (err, data) => {
+            if (err) {
+                res.writeHead(500);
+                res.end('Ошибка загрузки сайта');
+                return;
+            }
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(data);
+        });
+    } else {
+        res.writeHead(404);
+        res.end('Not found');
+    }
+});
+
+// 2. Подключаем WebSocket к HTTP-серверу
+const wss = new WebSocketServer({ server });
+let waitingUser = null;
 
 wss.on('connection', (ws) => {
     console.log('Пользователь подключился');
@@ -12,9 +35,7 @@ wss.on('connection', (ws) => {
         try {
             const data = JSON.parse(message);
 
-            // 1. Поиск собеседника
             if (data.type === 'find_peer') {
-                // Если пользователь уже был с кем-то в паре, разрываем связь
                 if (ws.peer) {
                     ws.peer.send(JSON.stringify({ type: 'peer_disconnected' }));
                     ws.peer.peer = null;
@@ -22,40 +43,33 @@ wss.on('connection', (ws) => {
                 }
 
                 if (waitingUser && waitingUser !== ws && waitingUser.readyState === 1) {
-                    // Нашли пару! Связываем двух пользователей друг с другом
                     ws.peer = waitingUser;
                     waitingUser.peer = ws;
 
-                    // Отправляем сигнал обоим
                     ws.send(JSON.stringify({ type: 'peer_found', initiator: true }));
                     waitingUser.send(JSON.stringify({ type: 'peer_found', initiator: false }));
 
-                    console.log('Пара успешно сформирована!');
+                    console.log('Пара сформирована!');
                     waitingUser = null;
                 } else {
-                    // Если никого нет в очереди, ставим пользователя в ожидание
                     waitingUser = ws;
-                    console.log('Пользователь добавлен в очередь');
+                    console.log('Пользователь в очереди');
                 }
             }
 
-            // 2. Пересылка WebRTC сигналов (offer, answer, candidate) и сообщений чата
             if (['offer', 'answer', 'candidate', 'chat_message'].includes(data.type)) {
                 if (ws.peer && ws.peer.readyState === 1) {
                     ws.peer.send(JSON.stringify(data));
                 }
             }
         } catch (err) {
-            console.error('Ошибка обработки данных:', err);
+            console.error('Ошибка:', err);
         }
     });
 
-    // 3. Обработка отключения
     ws.on('close', () => {
         console.log('Пользователь отключился');
-        if (waitingUser === ws) {
-            waitingUser = null;
-        }
+        if (waitingUser === ws) waitingUser = null;
         if (ws.peer) {
             ws.peer.send(JSON.stringify({ type: 'peer_disconnected' }));
             ws.peer.peer = null;
@@ -64,4 +78,7 @@ wss.on('connection', (ws) => {
     });
 });
 
-console.log('🚀 Сигнальный сервер запущен на ws://localhost:8080');
+// Запуск сервера
+server.listen(PORT, () => {
+    console.log(`🚀 Сервер запущен на порту ${PORT}`);
+});
