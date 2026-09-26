@@ -423,6 +423,7 @@
         const ageModal = document.getElementById('ageModal');
         const acceptBtn = document.getElementById('acceptBtn');
         const localVideo = document.getElementById('localVideo');
+        const remoteVideo = document.getElementById('remoteVideo');
         const localStatus = document.getElementById('localStatus');
         const remoteStatus = document.getElementById('remoteStatus');
         
@@ -433,6 +434,13 @@
         const sendBtn = document.getElementById('sendBtn');
 
         let localStream = null;
+        let peerConnection = null;
+        
+        // Автоматическое подключение к твоему серверу Render по защищенному протоколу
+        const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
+        
+        // Публичные сервера Google для обхода ограничений сети (NAT)
+        const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
         acceptBtn.addEventListener('click', async () => {
             ageModal.style.display = 'none';
@@ -441,7 +449,6 @@
 
         async function initMedia() {
             try {
-                // Сканируем подключенные физические устройства
                 const devices = await navigator.mediaDevices.enumerateDevices();
                 const hasVideo = devices.some(device => device.kind === 'videoinput');
                 const hasAudio = devices.some(device => device.kind === 'audioinput');
@@ -452,7 +459,6 @@
                     return;
                 }
 
-                // Запрашиваем только те устройства, которые физически есть
                 localStream = await navigator.mediaDevices.getUserMedia({
                     video: hasVideo,
                     audio: hasAudio
@@ -482,12 +488,94 @@
             }
         }
 
+        // Обработка сообщений от сервера Render
+        ws.onmessage = async (event) => {
+            try {
+                const data = JSON.parse(event.data);
+
+                if (data.type === 'peer_found') {
+                    addSystemMsg("Собеседник найден! Установка соединения...");
+                    createPeerConnection();
+                    
+                    if (data.initiator) {
+                        const offer = await peerConnection.createOffer();
+                        await peerConnection.setLocalDescription(offer);
+                        ws.send(JSON.stringify({ type: 'offer', offer: offer }));
+                    }
+                } else if (data.type === 'offer') {
+                    if (!peerConnection) createPeerConnection();
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+                    const answer = await peerConnection.createAnswer();
+                    await peerConnection.setLocalDescription(answer);
+                    ws.send(JSON.stringify({ type: 'answer', answer: answer }));
+                } else if (data.type === 'answer') {
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                } else if (data.type === 'candidate') {
+                    if (peerConnection) {
+                        await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+                    }
+                } else if (data.type === 'chat_message') {
+                    const msg = document.createElement('div');
+                    msg.className = 'msg-text';
+                    msg.innerHTML = `<strong>Собеседник:</strong> ${data.text}`;
+                    chatBody.appendChild(msg);
+                    chatBody.scrollTop = chatBody.scrollHeight;
+                } else if (data.type === 'peer_disconnected') {
+                    addSystemMsg("Собеседник отключился.");
+                    cleanupPeerConnection();
+                }
+            } catch (err) {
+                console.error("Ошибка WebRTC:", err);
+            }
+        };
+
+        // Создание P2P соединения
+        function createPeerConnection() {
+            peerConnection = new RTCPeerConnection(configuration);
+            
+            if (localStream) {
+                localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+            }
+
+            peerConnection.ontrack = event => {
+                remoteVideo.srcObject = event.streams[0];
+                remoteVideo.style.display = 'block';
+                remoteStatus.style.display = 'none';
+            };
+
+            peerConnection.onicecandidate = event => {
+                if (event.candidate) {
+                    ws.send(JSON.stringify({ type: 'candidate', candidate: event.candidate }));
+                }
+            };
+        }
+
+        // Очистка при отключении
+        function cleanupPeerConnection() {
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            remoteVideo.srcObject = null;
+            remoteVideo.style.display = 'none';
+            remoteStatus.style.display = 'block';
+            remoteStatus.innerText = "Поиск не запущен. Нажмите «ДАЛЕЕ».";
+        }
+
         nextBtn.addEventListener('click', () => {
+            if (ws.readyState !== WebSocket.OPEN) {
+                addSystemMsg("Ошибка: нет подключения к серверу. Обновите страницу.");
+                return;
+            }
+            cleanupPeerConnection();
             remoteStatus.innerText = "Ожидание подключения реального собеседника в сети...";
+            remoteStatus.style.display = 'block';
             addSystemMsg("Поиск реального собеседника в очереди...");
+            ws.send(JSON.stringify({ type: 'find_peer' }));
         });
 
         stopBtn.addEventListener('click', () => {
+            cleanupPeerConnection();
             remoteStatus.innerText = "Поиск остановлен.";
             addSystemMsg("Вы остановили поиск.");
         });
@@ -495,12 +583,18 @@
         function sendMessage() {
             const text = chatInput.value.trim();
             if (text !== '') {
+                // Отображаем у себя
                 const msg = document.createElement('div');
                 msg.className = 'msg-text';
                 msg.innerHTML = `<strong>Вы:</strong> ${text}`;
                 chatBody.appendChild(msg);
                 chatInput.value = '';
                 chatBody.scrollTop = chatBody.scrollHeight;
+
+                // Отправляем собеседнику, если есть соединение
+                if (ws.readyState === WebSocket.OPEN && peerConnection) {
+                    ws.send(JSON.stringify({ type: 'chat_message', text: text }));
+                }
             }
         }
 
