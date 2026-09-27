@@ -435,12 +435,73 @@
 
         let localStream = null;
         let peerConnection = null;
+        let ws = null;
         
-        // Автоматическое подключение к твоему серверу Render по защищенному протоколу
-        const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
-        
-        // Публичные сервера Google для обхода ограничений сети (NAT)
-        const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+        // Массив для хранения пакетов, если мобильный интернет тупит
+        let iceCandidatesQueue = []; 
+
+        // Расширенный список серверов для пробива мобильного интернета
+        const configuration = { 
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun3.l.google.com:19302' }
+            ] 
+        };
+
+        // Подключение к серверу вынесено в функцию, чтобы переподключаться при сбросе
+        function connectWebSocket() {
+            ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
+            
+            ws.onmessage = async (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+
+                    if (data.type === 'peer_found') {
+                        addSystemMsg("Собеседник найден! Установка соединения...");
+                        createPeerConnection();
+                        
+                        if (data.initiator) {
+                            const offer = await peerConnection.createOffer();
+                            await peerConnection.setLocalDescription(offer);
+                            ws.send(JSON.stringify({ type: 'offer', offer: offer }));
+                        }
+                    } else if (data.type === 'offer') {
+                        if (!peerConnection) createPeerConnection();
+                        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+                        const answer = await peerConnection.createAnswer();
+                        await peerConnection.setLocalDescription(answer);
+                        ws.send(JSON.stringify({ type: 'answer', answer: answer }));
+                        processIceQueue(); // Применяем накопленные пакеты связи
+                    } else if (data.type === 'answer') {
+                        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                        processIceQueue(); // Применяем накопленные пакеты связи
+                    } else if (data.type === 'candidate') {
+                        if (peerConnection && peerConnection.remoteDescription) {
+                            await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+                        } else {
+                            // Спасаем ситуацию на медленном интернете: складываем пакеты в очередь
+                            iceCandidatesQueue.push(data.candidate);
+                        }
+                    } else if (data.type === 'chat_message') {
+                        const msg = document.createElement('div');
+                        msg.className = 'msg-text';
+                        msg.innerHTML = `<strong>Собеседник:</strong> ${data.text}`;
+                        chatBody.appendChild(msg);
+                        chatBody.scrollTop = chatBody.scrollHeight;
+                    } else if (data.type === 'peer_disconnected') {
+                        addSystemMsg("Собеседник отключился.");
+                        cleanupPeerConnection();
+                    }
+                } catch (err) {
+                    console.error("Ошибка WebRTC:", err);
+                }
+            };
+        }
+
+        // Запускаем подключение при старте
+        connectWebSocket();
 
         acceptBtn.addEventListener('click', async () => {
             ageModal.style.display = 'none';
@@ -488,49 +549,8 @@
             }
         }
 
-        // Обработка сообщений от сервера Render
-        ws.onmessage = async (event) => {
-            try {
-                const data = JSON.parse(event.data);
-
-                if (data.type === 'peer_found') {
-                    addSystemMsg("Собеседник найден! Установка соединения...");
-                    createPeerConnection();
-                    
-                    if (data.initiator) {
-                        const offer = await peerConnection.createOffer();
-                        await peerConnection.setLocalDescription(offer);
-                        ws.send(JSON.stringify({ type: 'offer', offer: offer }));
-                    }
-                } else if (data.type === 'offer') {
-                    if (!peerConnection) createPeerConnection();
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-                    const answer = await peerConnection.createAnswer();
-                    await peerConnection.setLocalDescription(answer);
-                    ws.send(JSON.stringify({ type: 'answer', answer: answer }));
-                } else if (data.type === 'answer') {
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-                } else if (data.type === 'candidate') {
-                    if (peerConnection) {
-                        await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-                    }
-                } else if (data.type === 'chat_message') {
-                    const msg = document.createElement('div');
-                    msg.className = 'msg-text';
-                    msg.innerHTML = `<strong>Собеседник:</strong> ${data.text}`;
-                    chatBody.appendChild(msg);
-                    chatBody.scrollTop = chatBody.scrollHeight;
-                } else if (data.type === 'peer_disconnected') {
-                    addSystemMsg("Собеседник отключился.");
-                    cleanupPeerConnection();
-                }
-            } catch (err) {
-                console.error("Ошибка WebRTC:", err);
-            }
-        };
-
-        // Создание P2P соединения
         function createPeerConnection() {
+            iceCandidatesQueue = []; 
             peerConnection = new RTCPeerConnection(configuration);
             
             if (localStream) {
@@ -550,12 +570,20 @@
             };
         }
 
-        // Очистка при отключении
+        // Функция обработки зависших пакетов
+        function processIceQueue() {
+            while(iceCandidatesQueue.length > 0) {
+                const candidate = iceCandidatesQueue.shift();
+                peerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(e => console.error(e));
+            }
+        }
+
         function cleanupPeerConnection() {
             if (peerConnection) {
                 peerConnection.close();
                 peerConnection = null;
             }
+            iceCandidatesQueue = [];
             remoteVideo.srcObject = null;
             remoteVideo.style.display = 'none';
             remoteStatus.style.display = 'block';
@@ -563,8 +591,8 @@
         }
 
         nextBtn.addEventListener('click', () => {
-            if (ws.readyState !== WebSocket.OPEN) {
-                addSystemMsg("Ошибка: нет подключения к серверу. Обновите страницу.");
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addSystemMsg("Ошибка: нет подключения к серверу.");
                 return;
             }
             cleanupPeerConnection();
@@ -578,12 +606,18 @@
             cleanupPeerConnection();
             remoteStatus.innerText = "Поиск остановлен.";
             addSystemMsg("Вы остановили поиск.");
+            
+            // Чтобы сервер корректно отвязал нас от текущего собеседника и сбросил статус,
+            // делаем микро-перезапуск соединения.
+            if (ws) {
+                ws.close();
+                connectWebSocket(); 
+            }
         });
 
         function sendMessage() {
             const text = chatInput.value.trim();
             if (text !== '') {
-                // Отображаем у себя
                 const msg = document.createElement('div');
                 msg.className = 'msg-text';
                 msg.innerHTML = `<strong>Вы:</strong> ${text}`;
@@ -591,8 +625,7 @@
                 chatInput.value = '';
                 chatBody.scrollTop = chatBody.scrollHeight;
 
-                // Отправляем собеседнику, если есть соединение
-                if (ws.readyState === WebSocket.OPEN && peerConnection) {
+                if (ws && ws.readyState === WebSocket.OPEN && peerConnection) {
                     ws.send(JSON.stringify({ type: 'chat_message', text: text }));
                 }
             }
