@@ -1,12 +1,33 @@
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const { WebSocketServer } = require('ws');
 
-// Использование порт из окружения (для Render/Heroku) или 8080 по умолчанию
 const PORT = process.env.PORT || 8080;
-const wss = new WebSocketServer({ port: PORT });
+
+// 1. Создаем HTTP-сервер, который отдает файл index.html при входе на сайт
+const server = http.createServer((req, res) => {
+    if (req.url === '/' || req.url === '/index.html') {
+        fs.readFile(path.join(__dirname, 'index.html'), (err, data) => {
+            if (err) {
+                res.writeHead(500);
+                res.end('Ошибка загрузки интерфейса. Убедитесь, что файл index.html лежит рядом с server.js.');
+                return;
+            }
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(data);
+        });
+    } else {
+        res.writeHead(404);
+        res.end('Not found');
+    }
+});
+
+// 2. Привязываем наш WebSocket-сервер к этому же HTTP-серверу
+const wss = new WebSocketServer({ server });
 
 let waitingUser = null;
 
-// Рассылка количества подключенных клиентов в реальном времени
 function broadcastOnlineCount() {
     const count = wss.clients.size;
     const payload = JSON.stringify({ type: 'online_count', count: count });
@@ -20,15 +41,12 @@ function broadcastOnlineCount() {
 
 wss.on('connection', (ws) => {
     console.log('Пользователь подключился');
-    
-    // Обновляем счётчик онлайн при входе нового пользователя
     broadcastOnlineCount();
 
     ws.on('message', (message) => {
         try {
             const data = JSON.parse(message);
 
-            // 1. Поиск собеседника
             if (data.type === 'find_peer') {
                 if (ws.peer) {
                     if (ws.peer.readyState === 1) {
@@ -45,26 +63,24 @@ wss.on('connection', (ws) => {
                     ws.send(JSON.stringify({ type: 'peer_found', initiator: true }));
                     waitingUser.send(JSON.stringify({ type: 'peer_found', initiator: false }));
 
-                    console.log('Пара успешно сформирована!');
+                    console.log('Пара сформирована!');
                     waitingUser = null;
                 } else {
                     waitingUser = ws;
-                    console.log('Пользователь добавлен в очередь');
+                    console.log('Пользователь в очереди');
                 }
             }
 
-            // 2. Пересылка WebRTC сигналов и текстовых сообщений
             if (['offer', 'answer', 'candidate', 'chat_message'].includes(data.type)) {
                 if (ws.peer && ws.peer.readyState === 1) {
                     ws.peer.send(JSON.stringify(data));
                 }
             }
         } catch (err) {
-            console.error('Ошибка обработки сообщения:', err);
+            console.error('Ошибка:', err);
         }
     });
 
-    // 3. Отключение пользователя
     ws.on('close', () => {
         console.log('Пользователь отключился');
         if (waitingUser === ws) {
@@ -77,9 +93,11 @@ wss.on('connection', (ws) => {
             ws.peer.peer = null;
             ws.peer = null;
         }
-        // Обновляем счётчик онлайн при выходе
         broadcastOnlineCount();
     });
 });
 
-console.log(`🚀 Сигнальный сервер запущен на порту ${PORT}`);
+// 3. Запускаем объединенный сервер
+server.listen(PORT, () => {
+    console.log(`🚀 Сервер запущен на порту ${PORT}`);
+});
