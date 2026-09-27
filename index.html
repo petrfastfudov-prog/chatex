@@ -436,27 +436,46 @@
         let localStream = null;
         let peerConnection = null;
         let ws = null;
-        
-        // Массив для хранения пакетов, если мобильный интернет тупит
-        let iceCandidatesQueue = []; 
+        let iceCandidatesQueue = [];
 
-        // Расширенный список серверов для пробива мобильного интернета
+        // STUN и TURN серверы для пробития мобильных сетей (4G/5G) и NAT
         const configuration = { 
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
                 { urls: 'stun:stun2.l.google.com:19302' },
-                { urls: 'stun:stun3.l.google.com:19302' }
+                { urls: 'stun:stun3.l.google.com:19302' },
+                {
+                    urls: 'turn:openrelay.metered.ca:80',
+                    username: 'openrelay',
+                    credential: 'openrelay'
+                },
+                {
+                    urls: 'turn:openrelay.metered.ca:443',
+                    username: 'openrelay',
+                    credential: 'openrelay'
+                },
+                {
+                    urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+                    username: 'openrelay',
+                    credential: 'openrelay'
+                }
             ] 
         };
 
-        // Подключение к серверу вынесено в функцию, чтобы переподключаться при сбросе
         function connectWebSocket() {
             ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
             
             ws.onmessage = async (event) => {
                 try {
                     const data = JSON.parse(event.data);
+
+                    // Обновление онлайна
+                    if (data.type === 'online_count') {
+                        const countEl = document.querySelector('.online-count');
+                        if (countEl) countEl.innerText = data.count;
+                        return;
+                    }
 
                     if (data.type === 'peer_found') {
                         addSystemMsg("Собеседник найден! Установка соединения...");
@@ -473,15 +492,14 @@
                         const answer = await peerConnection.createAnswer();
                         await peerConnection.setLocalDescription(answer);
                         ws.send(JSON.stringify({ type: 'answer', answer: answer }));
-                        processIceQueue(); // Применяем накопленные пакеты связи
+                        await processIceQueue();
                     } else if (data.type === 'answer') {
                         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-                        processIceQueue(); // Применяем накопленные пакеты связи
+                        await processIceQueue();
                     } else if (data.type === 'candidate') {
-                        if (peerConnection && peerConnection.remoteDescription) {
+                        if (peerConnection && peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
                             await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
                         } else {
-                            // Спасаем ситуацию на медленном интернете: складываем пакеты в очередь
                             iceCandidatesQueue.push(data.candidate);
                         }
                     } else if (data.type === 'chat_message') {
@@ -495,12 +513,11 @@
                         cleanupPeerConnection();
                     }
                 } catch (err) {
-                    console.error("Ошибка WebRTC:", err);
+                    console.error("Ошибка обработки WebSocket данных:", err);
                 }
             };
         }
 
-        // Запускаем подключение при старте
         connectWebSocket();
 
         acceptBtn.addEventListener('click', async () => {
@@ -564,22 +581,27 @@
             };
 
             peerConnection.onicecandidate = event => {
-                if (event.candidate) {
+                if (event.candidate && ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ type: 'candidate', candidate: event.candidate }));
                 }
             };
         }
 
-        // Функция обработки зависших пакетов
-        function processIceQueue() {
-            while(iceCandidatesQueue.length > 0) {
+        async function processIceQueue() {
+            while (iceCandidatesQueue.length > 0) {
                 const candidate = iceCandidatesQueue.shift();
-                peerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(e => console.error(e));
+                try {
+                    await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                } catch (e) {
+                    console.error("Ошибка очереди ICE:", e);
+                }
             }
         }
 
         function cleanupPeerConnection() {
             if (peerConnection) {
+                peerConnection.onicecandidate = null;
+                peerConnection.ontrack = null;
                 peerConnection.close();
                 peerConnection = null;
             }
@@ -607,9 +629,7 @@
             remoteStatus.innerText = "Поиск остановлен.";
             addSystemMsg("Вы остановили поиск.");
             
-            // Чтобы сервер корректно отвязал нас от текущего собеседника и сбросил статус,
-            // делаем микро-перезапуск соединения.
-            if (ws) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.close();
                 connectWebSocket(); 
             }
