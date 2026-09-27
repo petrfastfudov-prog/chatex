@@ -438,39 +438,33 @@
         let ws = null;
         let iceCandidatesQueue = [];
 
-        // STUN и TURN серверы для пробития мобильных сетей (4G/5G) и NAT
+        // Быстрые и надёжные STUN/TURN серверы
         const configuration = { 
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
                 { urls: 'stun:stun2.l.google.com:19302' },
-                { urls: 'stun:stun3.l.google.com:19302' },
-                {
-                    urls: 'turn:openrelay.metered.ca:80',
-                    username: 'openrelay',
-                    credential: 'openrelay'
-                },
-                {
-                    urls: 'turn:openrelay.metered.ca:443',
-                    username: 'openrelay',
-                    credential: 'openrelay'
-                },
-                {
-                    urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-                    username: 'openrelay',
-                    credential: 'openrelay'
-                }
+                { urls: 'stun:stun.cloudflare.com:3478' }
             ] 
         };
 
         function connectWebSocket() {
-            ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
+            const protocol = location.protocol === 'https:' ? 'wss://' : 'ws://';
+            ws = new WebSocket(protocol + location.host);
             
+            ws.onopen = () => {
+                console.log("WebSocket соединен.");
+            };
+
+            ws.onclose = () => {
+                console.log("WebSocket закрылся, переподключение...");
+                setTimeout(connectWebSocket, 1500);
+            };
+
             ws.onmessage = async (event) => {
                 try {
                     const data = JSON.parse(event.data);
 
-                    // Обновление онлайна
                     if (data.type === 'online_count') {
                         const countEl = document.querySelector('.online-count');
                         if (countEl) countEl.innerText = data.count;
@@ -478,7 +472,8 @@
                     }
 
                     if (data.type === 'peer_found') {
-                        addSystemMsg("Собеседник найден! Установка соединения...");
+                        addSystemMsg("Собеседник найден! Установка связи...");
+                        cleanupPeerConnection();
                         createPeerConnection();
                         
                         if (data.initiator) {
@@ -494,8 +489,10 @@
                         ws.send(JSON.stringify({ type: 'answer', answer: answer }));
                         await processIceQueue();
                     } else if (data.type === 'answer') {
-                        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-                        await processIceQueue();
+                        if (peerConnection) {
+                            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                            await processIceQueue();
+                        }
                     } else if (data.type === 'candidate') {
                         if (peerConnection && peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
                             await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
@@ -513,7 +510,7 @@
                         cleanupPeerConnection();
                     }
                 } catch (err) {
-                    console.error("Ошибка обработки WebSocket данных:", err);
+                    console.error("Ошибка при приеме данных:", err);
                 }
             };
         }
@@ -527,47 +524,30 @@
 
         async function initMedia() {
             try {
-                const devices = await navigator.mediaDevices.enumerateDevices();
-                const hasVideo = devices.some(device => device.kind === 'videoinput');
-                const hasAudio = devices.some(device => device.kind === 'audioinput');
-
-                if (!hasVideo && !hasAudio) {
-                    localStatus.innerText = "Камера и микрофон не обнаружены на данном ПК.";
-                    addSystemMsg("Устройства ввода (камера/микрофон) отсутствуют.");
-                    return;
-                }
-
-                localStream = await navigator.mediaDevices.getUserMedia({
-                    video: hasVideo,
-                    audio: hasAudio
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: true,
+                    audio: true
                 });
-
-                if (hasVideo) {
-                    localVideo.srcObject = localStream;
-                    localVideo.style.display = 'block';
-                    localStatus.style.display = 'none';
-                    addSystemMsg("Камера и микрофон успешно подключены.");
-                } else {
-                    localStatus.innerText = "Камера не обнаружена (работает только микрофон).";
-                    addSystemMsg("Аудиоустройство подключено (без видеокамеры).");
-                }
-
+                localStream = stream;
+                localVideo.srcObject = localStream;
+                localVideo.style.display = 'block';
+                localStatus.style.display = 'none';
+                addSystemMsg("Камера и микрофон успешно подключены.");
             } catch (err) {
-                console.error("Ошибка инициализации устройств:", err);
-                if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-                    localStatus.innerText = "Доступ заблокирован в настройках браузера или ОС.";
+                console.warn("Ошибка подключения полного медиапотока, пробуем только аудио...", err);
+                try {
+                    const audioStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+                    localStream = audioStream;
+                    localStatus.innerText = "Работает только микрофон (без видеокамеры).";
+                    addSystemMsg("Микрофон подключен (без видео).");
+                } catch (errAudio) {
+                    localStatus.innerText = "Устройства ввода (камера/микрофон) недоступны.";
                     addSystemMsg("Предупреждение: Доступ к медиаустройствам отклонен.");
-                } else if (err.name === 'NotFoundError') {
-                    localStatus.innerText = "Камера или микрофон не найдены на ПК.";
-                    addSystemMsg("Устройства не обнаружены.");
-                } else {
-                    localStatus.innerText = "Камера не обнаружена (работает только микрофон).";
                 }
             }
         }
 
         function createPeerConnection() {
-            iceCandidatesQueue = []; 
             peerConnection = new RTCPeerConnection(configuration);
             
             if (localStream) {
@@ -575,9 +555,12 @@
             }
 
             peerConnection.ontrack = event => {
-                remoteVideo.srcObject = event.streams[0];
-                remoteVideo.style.display = 'block';
-                remoteStatus.style.display = 'none';
+                if (event.streams && event.streams[0]) {
+                    remoteVideo.srcObject = event.streams[0];
+                    remoteVideo.style.display = 'block';
+                    remoteStatus.style.display = 'none';
+                    remoteVideo.play().catch(e => console.log("Автозапуск видео:", e));
+                }
             };
 
             peerConnection.onicecandidate = event => {
@@ -591,9 +574,11 @@
             while (iceCandidatesQueue.length > 0) {
                 const candidate = iceCandidatesQueue.shift();
                 try {
-                    await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                    if (peerConnection && peerConnection.remoteDescription) {
+                        await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                    }
                 } catch (e) {
-                    console.error("Ошибка очереди ICE:", e);
+                    console.error("Ошибка обработки пакета ICE:", e);
                 }
             }
         }
@@ -614,13 +599,13 @@
 
         nextBtn.addEventListener('click', () => {
             if (!ws || ws.readyState !== WebSocket.OPEN) {
-                addSystemMsg("Ошибка: нет подключения к серверу.");
+                addSystemMsg("Подключение к серверу... Попробуйте через секунду.");
                 return;
             }
             cleanupPeerConnection();
-            remoteStatus.innerText = "Ожидание подключения реального собеседника в сети...";
+            remoteStatus.innerText = "Поиск реального собеседника...";
             remoteStatus.style.display = 'block';
-            addSystemMsg("Поиск реального собеседника в очереди...");
+            addSystemMsg("Ищем параллельные подключения в сети...");
             ws.send(JSON.stringify({ type: 'find_peer' }));
         });
 
@@ -630,8 +615,7 @@
             addSystemMsg("Вы остановили поиск.");
             
             if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.close();
-                connectWebSocket(); 
+                ws.send(JSON.stringify({ type: 'stop_search' }));
             }
         });
 
