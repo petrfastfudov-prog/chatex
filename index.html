@@ -31,11 +31,15 @@
             height: 100dvh;
             width: 100%;
             overflow: hidden;
+            position: fixed; /* Блокирует сдвиг экрана в Safari iOS */
+            top: 0;
+            left: 0;
             background: var(--bg-main);
             background-attachment: fixed;
             color: var(--text-primary);
             display: flex;
             flex-direction: column;
+            touch-action: none;
         }
 
         /* Всплывающие уведомления */
@@ -214,6 +218,7 @@
             width: 100%;
             margin: 0 auto;
             min-height: 0;
+            overflow: hidden;
         }
 
         /* Левая колонка */
@@ -223,6 +228,7 @@
             flex-direction: column;
             gap: 14px;
             height: 100%;
+            min-height: 0;
         }
 
         .videos-container {
@@ -256,6 +262,22 @@
             height: 100%;
             object-fit: cover;
             display: none;
+            position: absolute;
+            top: 0; left: 0;
+            z-index: 1;
+        }
+
+        /* Canvas для анимации шума ТВ */
+        .tv-noise-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: none;
+            z-index: 2;
+            opacity: 0.85;
         }
 
         .video-status {
@@ -264,6 +286,10 @@
             line-height: 1.5;
             padding: 20px;
             max-width: 85%;
+            z-index: 3;
+            background: rgba(15, 23, 42, 0.65);
+            backdrop-filter: blur(4px);
+            border-radius: 8px;
         }
 
         /* Плашка лагов сети */
@@ -317,19 +343,11 @@
             transform: translateY(1px);
         }
 
-        .btn-start {
-            background: var(--accent-green);
-        }
-        .btn-start:hover {
-            background: #16a34a;
-        }
+        .btn-start { background: var(--accent-green); }
+        .btn-start:hover { background: #16a34a; }
 
-        .btn-stop {
-            background: var(--accent-red);
-        }
-        .btn-stop:hover {
-            background: #dc2626;
-        }
+        .btn-stop { background: var(--accent-red); }
+        .btn-stop:hover { background: #dc2626; }
 
         .btn-icon {
             flex: 0 0 52px;
@@ -341,9 +359,7 @@
             justify-content: center;
         }
 
-        .btn-icon:hover {
-            background: rgba(255, 255, 255, 0.1);
-        }
+        .btn-icon:hover { background: rgba(255, 255, 255, 0.1); }
 
         /* Правая колонка (Чат) */
         .right-column {
@@ -356,6 +372,7 @@
             flex-direction: column;
             overflow: hidden;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            min-height: 0;
         }
 
         .chat-header {
@@ -377,6 +394,7 @@
             flex-direction: column;
             gap: 12px;
             -webkit-overflow-scrolling: touch;
+            touch-action: pan-y;
         }
 
         .msg-system {
@@ -409,7 +427,6 @@
             gap: 10px;
         }
 
-        /* КРИТИЧЕСКОЙ ФИКС ДЛЯ IPHONE: font-size строго 16px отключает авто-зум Safari */
         .chat-input {
             flex: 1;
             padding: 12px 16px;
@@ -421,11 +438,10 @@
             outline: none;
             transition: border-color 0.2s;
             -webkit-appearance: none;
+            touch-action: manipulation;
         }
 
-        .chat-input:focus {
-            border-color: var(--accent-blue);
-        }
+        .chat-input:focus { border-color: var(--accent-blue); }
 
         .send-btn {
             padding: 0 20px;
@@ -439,25 +455,28 @@
             font-size: 0.95rem;
         }
 
-        .send-btn:hover {
-            background: #2563eb;
-        }
+        .send-btn:hover { background: #2563eb; }
 
-        /* Адаптация под мобильные без изменения ПК-дизайна */
+        /* ИДЕАЛЬНАЯ АДАПТАЦИЯ ДЛЯ IPHONE С ЖЕСТКИМ ОГРАНИЧЕНИЕМ ВЫСОТЫ */
         @media (max-width: 768px) {
             .main-wrapper {
                 flex-direction: column;
                 padding: 10px;
                 gap: 10px;
+                height: calc(100dvh - 58px);
             }
 
             .left-column {
                 width: 100%;
                 flex: 1;
+                min-height: 0;
             }
 
             .videos-container {
                 display: block;
+                position: relative;
+                width: 100%;
+                height: 100%;
             }
 
             .video-window:first-child {
@@ -467,19 +486,20 @@
 
             .video-window:last-child {
                 position: absolute;
-                bottom: 12px;
-                right: 12px;
-                width: 110px;
-                height: 150px;
-                z-index: 5;
+                bottom: 10px;
+                right: 10px;
+                width: 100px;
+                height: 140px;
+                z-index: 20;
                 border-radius: 10px;
-                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
-                border: 2px solid rgba(255, 255, 255, 0.15);
+                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.8);
+                border: 2px solid rgba(255, 255, 255, 0.2);
             }
 
             .right-column {
-                height: 220px;
+                height: 170px;
                 flex: none;
+                min-height: 0;
             }
         }
     </style>
@@ -522,6 +542,7 @@
         <div class="left-column">
             <div class="videos-container">
                 <div class="video-window">
+                    <canvas class="tv-noise-canvas" id="tvNoiseCanvas"></canvas>
                     <video id="remoteVideo" autoplay playsinline webkit-playsinline></video>
                     <div class="video-status" id="remoteStatus">Поиск не запущен. Нажмите «ДАЛЕЕ».</div>
                     
@@ -563,6 +584,52 @@
     </div>
 
     <script>
+        // --- ГЕНЕРАТОР ШУМА ТВ (ШУМ ТЕЛЕВИЗОРА ПРИ ПОИСКЕ) ---
+        const tvCanvas = document.getElementById('tvNoiseCanvas');
+        const tvCtx = tvCanvas.getContext('2d');
+        let noiseAnimationId = null;
+
+        function resizeNoiseCanvas() {
+            tvCanvas.width = 320;
+            tvCanvas.height = 240;
+        }
+
+        function generateTVNoise() {
+            const w = tvCanvas.width;
+            const h = tvCanvas.height;
+            if (w === 0 || h === 0) return;
+            
+            const imgData = tvCtx.createImageData(w, h);
+            const buffer32 = new Uint32Array(imgData.data.buffer);
+            const len = buffer32.length;
+
+            for (let i = 0; i < len; i++) {
+                if (Math.random() < 0.5) {
+                    const c = Math.floor(Math.random() * 225);
+                    buffer32[i] = (255 << 24) | (c << 16) | (c << 8) | c;
+                } else {
+                    buffer32[i] = 0xff050505;
+                }
+            }
+            tvCtx.putImageData(imgData, 0, 0);
+            noiseAnimationId = requestAnimationFrame(generateTVNoise);
+        }
+
+        function startTVNoise() {
+            if (noiseAnimationId) return;
+            resizeNoiseCanvas();
+            tvCanvas.style.display = 'block';
+            generateTVNoise();
+        }
+
+        function stopTVNoise() {
+            if (noiseAnimationId) {
+                cancelAnimationFrame(noiseAnimationId);
+                noiseAnimationId = null;
+            }
+            tvCanvas.style.display = 'none';
+        }
+
         // --- УВЕДОМЛЕНИЯ (ТОСТЫ) ---
         function showToast(message, type = 'info') {
             const container = document.getElementById('toastContainer');
@@ -613,7 +680,7 @@
         let ws = null;
         let iceCandidatesQueue = [];
         let isMuted = false;
-        let currentFacingMode = 'user'; // 'user' - селфи, 'environment' - задняя
+        let currentFacingMode = 'user';
 
         const configuration = { 
             iceServers: [
@@ -627,11 +694,6 @@
                 },
                 {
                     urls: 'turn:openrelay.metered.ca:443',
-                    username: 'openrelay',
-                    credential: 'openrelay'
-                },
-                {
-                    urls: 'turn:openrelay.metered.ca:443?transport=tcp',
                     username: 'openrelay',
                     credential: 'openrelay'
                 }
@@ -658,7 +720,8 @@
                     }
 
                     if (data.type === 'peer_found') {
-                        addSystemMsg("Собеседник найден! Установка связи...");
+                        addSystemMsg("Собеседник найден! Соединение...");
+                        remoteStatus.innerText = "Установка соединения с собеседником...";
                         cleanupPeerConnection();
                         createPeerConnection();
                         
@@ -692,8 +755,19 @@
                         chatBody.appendChild(msg);
                         chatBody.scrollTop = chatBody.scrollHeight;
                     } else if (data.type === 'peer_disconnected') {
-                        addSystemMsg("Собеседник отключился.");
+                        // ОБРАБОТКА СБРОСА СОБЕСЕДНИКОМ (Собеседник нажал Далее/Закрыл вкладку)
+                        addSystemMsg("Собеседник переключил чат.");
                         cleanupPeerConnection();
+                        startTVNoise();
+                        remoteStatus.innerText = "Собеседник отключился. Идем дальше...";
+                        remoteStatus.style.display = 'block';
+                        
+                        // Автоматически запрашиваем поиск следующего собеседника
+                        setTimeout(() => {
+                            if (ws && ws.readyState === WebSocket.OPEN) {
+                                ws.send(JSON.stringify({ type: 'find_peer' }));
+                            }
+                        }, 1000);
                     }
                 } catch (err) {
                     console.error("Ошибка передачи:", err);
@@ -718,21 +792,21 @@
                 localVideo.srcObject = localStream;
                 localVideo.style.display = 'block';
                 localStatus.style.display = 'none';
-                addSystemMsg("Камера и микрофон успешно подключены.");
+                addSystemMsg("Камера и микрофон готовы.");
             } catch (err) {
                 try {
                     const audioStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
                     localStream = audioStream;
-                    localStatus.innerText = "Работает только микрофон (без камеры).";
+                    localStatus.innerText = "Работает только микрофон.";
                     addSystemMsg("Микрофон подключен.");
                 } catch (errAudio) {
-                    localStatus.innerText = "Устройства ввода (камера/микрофон) недоступны.";
-                    addSystemMsg("Предупреждение: Камера или микрофон недоступны.");
+                    localStatus.innerText = "Устройства ввода недоступны.";
+                    addSystemMsg("Ошибка: Доступ к камере/микрофону отклонен.");
                 }
             }
         }
 
-        // --- ТОЧНОЕ ГЛУШЕНИЕ МИКРОФОНА ---
+        // --- ГЛУШЕНИЕ МИКРОФОНА ---
         muteBtn.addEventListener('click', () => {
             if (localStream && localStream.getAudioTracks().length > 0) {
                 isMuted = !isMuted;
@@ -741,40 +815,30 @@
                 });
                 muteBtn.innerText = isMuted ? '🔇' : '🎙️';
                 muteBtn.style.background = isMuted ? 'rgba(239, 68, 68, 0.25)' : 'rgba(255, 255, 255, 0.05)';
-                showToast(isMuted ? 'Микрофон отключен (собеседник вас не слышит)' : 'Микрофон включен', isMuted ? 'warning' : 'success');
+                showToast(isMuted ? 'Микрофон отключен' : 'Микрофон включен', isMuted ? 'warning' : 'success');
             } else {
                 showToast('Микрофон недоступен', 'error');
             }
         });
 
-        // --- СМЕНА КАМЕРЫ (ФРОНТАЛЬНАЯ / ЗАДНЯЯ) ---
+        // --- СМЕНА КАМЕРЫ ---
         flipBtn.addEventListener('click', async () => {
-            if (!localStream) {
-                showToast('Камера не активирована', 'error');
-                return;
-            }
-
+            if (!localStream) return;
             const oldVideoTrack = localStream.getVideoTracks()[0];
-            if (!oldVideoTrack) {
-                showToast('Видеопоток отсутствует', 'error');
-                return;
-            }
+            if (!oldVideoTrack) return;
 
             currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
 
             try {
                 oldVideoTrack.stop();
-
                 let newStream;
                 try {
                     newStream = await navigator.mediaDevices.getUserMedia({
-                        video: { facingMode: { exact: currentFacingMode } },
-                        audio: false
+                        video: { facingMode: { exact: currentFacingMode } }, audio: false
                     });
                 } catch (e) {
                     newStream = await navigator.mediaDevices.getUserMedia({
-                        video: { facingMode: currentFacingMode },
-                        audio: false
+                        video: { facingMode: currentFacingMode }, audio: false
                     });
                 }
 
@@ -783,7 +847,6 @@
                 localStream.addTrack(newVideoTrack);
                 localVideo.srcObject = localStream;
 
-                // Заменяем трек в активном WebRTC соединении без разрыва звонка
                 if (peerConnection) {
                     const senders = peerConnection.getSenders();
                     const videoSender = senders.find(s => s.track && s.track.kind === 'video');
@@ -791,11 +854,9 @@
                         await videoSender.replaceTrack(newVideoTrack);
                     }
                 }
-
                 showToast(currentFacingMode === 'user' ? 'Селфи-камера' : 'Задняя камера', 'info');
             } catch (err) {
-                console.error("Ошибка переключения камеры:", err);
-                showToast('Не удалось переключить камеру', 'error');
+                showToast('Не удалось сменить камеру', 'error');
             }
         });
 
@@ -814,25 +875,25 @@
 
                 if (state === 'connected' || state === 'completed') {
                     networkWarning.style.display = 'none';
+                    stopTVNoise(); // ОСТАНАВЛИВАЕМ ШУМ ТВ, КОГДА ВИДЕО ПОДКЛЮЧЕНО
                 } else if (state === 'disconnected') {
                     networkWarning.style.display = 'flex';
-                    addSystemMsg('У собеседника проблемы с сетью. Ожидаем восстановление...', 'msg-error');
                 } else if (state === 'failed') {
                     networkWarning.style.display = 'none';
-                    addSystemMsg('Соединение разорвано из-за потери сети.', 'msg-error');
                     cleanupPeerConnection();
                 }
             };
 
             peerConnection.ontrack = event => {
                 if (event.streams && event.streams[0]) {
+                    stopTVNoise(); // ВЫКЛЮЧАЕМ ПОМЕХИ
                     remoteVideo.srcObject = event.streams[0];
                     remoteVideo.style.display = 'block';
                     remoteStatus.style.display = 'none';
                     
                     const playPromise = remoteVideo.play();
                     if (playPromise !== undefined) {
-                        playPromise.catch(error => {
+                        playPromise.catch(() => {
                             remoteVideo.muted = true;
                             remoteVideo.play();
                         });
@@ -854,9 +915,7 @@
                     if (peerConnection && peerConnection.remoteDescription) {
                         await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
                     }
-                } catch (e) {
-                    console.error("Ошибка очереди ICE:", e);
-                }
+                } catch (e) {}
             }
         }
 
@@ -870,29 +929,32 @@
             iceCandidatesQueue = [];
             remoteVideo.srcObject = null;
             remoteVideo.style.display = 'none';
-            remoteStatus.style.display = 'block';
-            remoteStatus.innerText = "Поиск не запущен. Нажмите «ДАЛЕЕ».";
             networkWarning.style.display = 'none';
         }
 
+        // НАЖАТИЕ НА «ДАЛЕЕ»
         nextBtn.addEventListener('click', () => {
             if (!ws || ws.readyState !== WebSocket.OPEN) {
                 showToast("Сервер недоступен, подождите...", "error");
                 return;
             }
             cleanupPeerConnection();
-            remoteStatus.innerText = "Поиск реального собеседника...";
+            startTVNoise(); // ВЛЮЧАЕМ ШУМ ТЕЛЕВИЗОРА ПРИ ПОИСКЕ
+            remoteStatus.innerText = "Ищем свободного собеседника...";
             remoteStatus.style.display = 'block';
-            addSystemMsg("Ищем параллельные подключения в сети...");
+            addSystemMsg("Поиск нового собеседника...");
             ws.send(JSON.stringify({ type: 'find_peer' }));
         });
 
+        // НАЖАТИЕ НА «СТОП»
         stopBtn.addEventListener('click', () => {
             cleanupPeerConnection();
+            stopTVNoise();
             remoteStatus.innerText = "Поиск остановлен.";
+            remoteStatus.style.display = 'block';
             addSystemMsg("Вы остановили поиск.");
             
-            if (ws && ws.readyState !== WebSocket.OPEN) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'stop_search' }));
             }
         });
@@ -907,7 +969,7 @@
                 chatInput.value = '';
                 chatBody.scrollTop = chatBody.scrollHeight;
 
-                if (ws && ws.readyState !== WebSocket.OPEN && peerConnection) {
+                if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ type: 'chat_message', text: text }));
                 }
             }
@@ -916,14 +978,6 @@
         sendBtn.addEventListener('click', sendMessage);
         chatInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendMessage();
-        });
-
-        // ПРЕДОТВРАЩЕНИЕ СДВИГА ЭКРАНА В SAFARI ПРИ ФОКУСЕ НА ИНПУТ
-        chatInput.addEventListener('focus', () => {
-            setTimeout(() => {
-                chatBody.scrollTop = chatBody.scrollHeight;
-                window.scrollTo(0, 0);
-            }, 300);
         });
 
         function addSystemMsg(text, className = 'msg-system') {
