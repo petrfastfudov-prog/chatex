@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Chatex — Видеочат Рулетка</title>
+    <title>Chatex — Анонимный Чат</title>
     <style>
         :root {
             --bg-main: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #0f172a 60%, #020617 100%);
@@ -31,7 +31,7 @@
             height: 100dvh;
             width: 100%;
             overflow: hidden;
-            position: fixed; /* Блокирует сдвиг экрана в Safari iOS */
+            position: fixed;
             top: 0;
             left: 0;
             background: var(--bg-main);
@@ -42,7 +42,138 @@
             touch-action: none;
         }
 
-        /* Всплывающие уведомления */
+        /* --- ЗАСТАВКА С ПРАВИЛАМИ --- */
+        #welcome-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(2, 6, 23, 0.98);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            backdrop-filter: blur(12px);
+        }
+
+        #welcome-modal {
+            background-color: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 30px;
+            width: 90%;
+            max-width: 640px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+            color: var(--text-primary);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .modal-title {
+            font-size: 1.4rem;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .modal-badge {
+            background: var(--accent-red);
+            color: #fff;
+            font-size: 1rem;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+
+        #rules-box {
+            background: rgba(2, 6, 23, 0.6);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            height: 260px;
+            overflow-y: scroll;
+            padding: 16px;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            color: var(--text-muted);
+            -webkit-overflow-scrolling: touch;
+        }
+
+        #rules-box h3 {
+            color: var(--text-primary);
+            margin-bottom: 10px;
+            font-size: 1.05rem;
+        }
+
+        #rules-box p {
+            margin-bottom: 12px;
+        }
+
+        #rules-box b {
+            color: #f8fafc;
+        }
+
+        #rules-box::-webkit-scrollbar { width: 6px; }
+        #rules-box::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 10px; }
+        #rules-box::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: rgba(59, 130, 246, 0.1);
+            padding: 12px 16px;
+            border-radius: 8px;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            cursor: pointer;
+        }
+
+        .checkbox-group input {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .checkbox-group label {
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.95rem;
+            user-select: none;
+        }
+
+        #accept-btn {
+            background: var(--accent-green);
+            color: #fff;
+            border: none;
+            padding: 14px;
+            border-radius: 10px;
+            font-size: 1.05rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        #accept-btn:disabled {
+            background: #1e293b;
+            color: #475569;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        #accept-btn:not(:disabled):hover {
+            background: #16a34a;
+            box-shadow: 0 4px 14px rgba(34, 197, 94, 0.3);
+        }
+
+        /* Уведомления */
         .toast-container {
             position: fixed;
             top: 70px;
@@ -68,99 +199,10 @@
             word-wrap: break-word;
         }
 
-        .toast.show {
-            transform: translateX(0);
-            opacity: 1;
-        }
-
+        .toast.show { transform: translateX(0); opacity: 1; }
         .toast.error { border-left-color: var(--accent-red); }
         .toast.success { border-left-color: var(--accent-green); }
         .toast.warning { border-left-color: #f59e0b; }
-
-        /* Заставка 18+ */
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            height: 100dvh;
-            background: rgba(2, 6, 23, 0.94);
-            backdrop-filter: blur(12px);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 9999;
-        }
-
-        .modal-card {
-            background: #0f172a;
-            border: 1px solid var(--card-border);
-            border-radius: 16px;
-            padding: 32px;
-            max-width: 480px;
-            width: 90%;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
-            text-align: center;
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-
-        .modal-badge {
-            align-self: center;
-            background: var(--accent-red);
-            color: #fff;
-            font-weight: bold;
-            font-size: 1.2rem;
-            padding: 6px 16px;
-            border-radius: 20px;
-            box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
-        }
-
-        .modal-title {
-            font-size: 1.4rem;
-            font-weight: bold;
-            color: var(--text-primary);
-        }
-
-        .modal-rules {
-            text-align: left;
-            background: rgba(2, 6, 23, 0.6);
-            border: 1px solid var(--card-border);
-            border-radius: 10px;
-            padding: 16px;
-            font-size: 0.9rem;
-            color: var(--text-muted);
-            line-height: 1.5;
-        }
-
-        .modal-rules ul {
-            padding-left: 20px;
-            margin-top: 10px;
-        }
-
-        .modal-rules li {
-            margin-bottom: 6px;
-        }
-
-        .modal-btn {
-            background: var(--accent-green);
-            color: #fff;
-            border: none;
-            padding: 16px 20px;
-            border-radius: 10px;
-            font-size: 1.05rem;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.2s;
-            box-shadow: 0 4px 14px rgba(34, 197, 94, 0.3);
-        }
-
-        .modal-btn:hover {
-            background: #16a34a;
-            transform: translateY(-1px);
-        }
 
         /* Шапка */
         header {
@@ -198,17 +240,10 @@
             box-shadow: 0 0 12px rgba(59, 130, 246, 0.5);
         }
 
-        .header-meta {
-            font-size: 0.85rem;
-            color: var(--text-muted);
-        }
+        .header-meta { font-size: 0.85rem; color: var(--text-muted); }
+        .online-count { color: #38bdf8; font-weight: bold; }
 
-        .online-count {
-            color: #38bdf8;
-            font-weight: bold;
-        }
-
-        /* Главный контейнер */
+        /* Основной контейнер */
         .main-wrapper {
             flex: 1;
             display: flex;
@@ -219,9 +254,9 @@
             margin: 0 auto;
             min-height: 0;
             overflow: hidden;
+            display: none;
         }
 
-        /* Левая колонка */
         .left-column {
             width: 520px;
             display: flex;
@@ -267,17 +302,10 @@
             z-index: 1;
         }
 
-        /* Canvas для анимации шума ТВ */
         .tv-noise-canvas {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            display: none;
-            z-index: 2;
-            opacity: 0.85;
+            top: 0; left: 0; width: 100%; height: 100%;
+            object-fit: cover; display: none; z-index: 2; opacity: 0.85;
         }
 
         .video-status {
@@ -292,34 +320,18 @@
             border-radius: 8px;
         }
 
-        /* Плашка лагов сети */
         .network-warning {
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
             background: rgba(15, 23, 42, 0.88);
             color: #f59e0b;
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            padding: 20px;
-            z-index: 10;
-            backdrop-filter: blur(6px);
+            display: none; flex-direction: column; align-items: center;
+            justify-content: center; text-align: center; padding: 20px;
+            z-index: 10; backdrop-filter: blur(6px);
         }
 
-        .network-warning span {
-            font-size: 1.1rem;
-            font-weight: bold;
-            margin-bottom: 6px;
-        }
+        .network-warning span { font-size: 1.1rem; font-weight: bold; margin-bottom: 6px; }
+        .network-warning small { color: var(--text-muted); font-size: 0.85rem; }
 
-        .network-warning small {
-            color: var(--text-muted);
-            font-size: 0.85rem;
-        }
-
-        /* Кнопки управления */
         .control-buttons {
             display: flex;
             gap: 10px;
@@ -339,13 +351,9 @@
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         }
 
-        .btn:active {
-            transform: translateY(1px);
-        }
-
+        .btn:active { transform: translateY(1px); }
         .btn-start { background: var(--accent-green); }
         .btn-start:hover { background: #16a34a; }
-
         .btn-stop { background: var(--accent-red); }
         .btn-stop:hover { background: #dc2626; }
 
@@ -357,11 +365,14 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            border-radius: 10px;
+            cursor: pointer;
         }
 
         .btn-icon:hover { background: rgba(255, 255, 255, 0.1); }
+        #flipBtn { display: none; }
 
-        /* Правая колонка (Чат) */
+        /* Чат */
         .right-column {
             flex: 1;
             height: 100%;
@@ -379,10 +390,13 @@
             background: rgba(2, 6, 23, 0.5);
             border-bottom: 1px solid var(--card-border);
             padding: 14px 20px;
-            font-size: 0.9rem;
+            font-size: 1.1rem;
             color: var(--text-muted);
             font-weight: bold;
             flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .chat-body {
@@ -397,23 +411,9 @@
             touch-action: pan-y;
         }
 
-        .msg-system {
-            color: #64748b;
-            font-size: 0.85rem;
-            font-style: italic;
-        }
-
-        .msg-text {
-            color: var(--text-primary);
-            word-break: break-word;
-            line-height: 1.4;
-        }
-
-        .msg-error {
-            color: var(--accent-red);
-            font-size: 0.85rem;
-            font-weight: bold;
-        }
+        .msg-system { color: #64748b; font-size: 0.85rem; font-style: italic; }
+        .msg-text { color: var(--text-primary); word-break: break-word; line-height: 1.4; }
+        .msg-error { color: var(--accent-red); font-size: 0.85rem; font-weight: bold; }
 
         .chat-footer {
             border-top: 1px solid var(--card-border);
@@ -422,10 +422,7 @@
             flex-shrink: 0;
         }
 
-        .input-wrapper {
-            display: flex;
-            gap: 10px;
-        }
+        .input-wrapper { display: flex; gap: 10px; }
 
         .chat-input {
             flex: 1;
@@ -457,7 +454,6 @@
 
         .send-btn:hover { background: #2563eb; }
 
-        /* ИДЕАЛЬНАЯ АДАПТАЦИЯ ДЛЯ IPHONE С ЖЕСТКИМ ОГРАНИЧЕНИЕМ ВЫСОТЫ */
         @media (max-width: 768px) {
             .main-wrapper {
                 flex-direction: column;
@@ -466,23 +462,9 @@
                 height: calc(100dvh - 58px);
             }
 
-            .left-column {
-                width: 100%;
-                flex: 1;
-                min-height: 0;
-            }
-
-            .videos-container {
-                display: block;
-                position: relative;
-                width: 100%;
-                height: 100%;
-            }
-
-            .video-window:first-child {
-                width: 100%;
-                height: 100%;
-            }
+            .left-column { width: 100%; flex: 1; min-height: 0; }
+            .videos-container { display: block; position: relative; width: 100%; height: 100%; }
+            .video-window:first-child { width: 100%; height: 100%; }
 
             .video-window:last-child {
                 position: absolute;
@@ -496,33 +478,54 @@
                 border: 2px solid rgba(255, 255, 255, 0.2);
             }
 
-            .right-column {
-                height: 170px;
-                flex: none;
-                min-height: 0;
-            }
+            .right-column { height: 170px; flex: none; min-height: 0; }
+            #flipBtn { display: flex; }
         }
     </style>
 </head>
 <body>
 
-    <!-- Уведомления -->
     <div class="toast-container" id="toastContainer"></div>
 
-    <!-- Модальное окно 18+ -->
-    <div class="modal-overlay" id="ageModal">
-        <div class="modal-card">
-            <div class="modal-badge">18+</div>
-            <div class="modal-title">Правила сервиса</div>
-            <div class="modal-rules">
-                Входя на сайт, вы подтверждаете правила сервиса:
-                <ul>
-                    <li>Вам исполнилось <strong>18 лет</strong>.</li>
-                    <li>Согласие на использование доступных медиаустройств.</li>
-                    <li>Запрещены проявления агрессии, спам и недопустимый контент.</li>
-                </ul>
+    <!-- Заставка с правилами (10 пунктов, обязательная прокрутка) -->
+    <div id="welcome-overlay">
+        <div id="welcome-modal">
+            <div class="modal-header">
+                <div class="modal-title">⚡ Chatex — Условия использования</div>
+                <div class="modal-badge">18+</div>
             </div>
-            <button class="modal-btn" id="acceptBtn">Войти на сайт</button>
+            
+            <p style="color: var(--text-muted); font-size: 0.9rem;">Внимательно ознакомьтесь с правилами платформы. Прокрутите текст до конца для активации входа.</p>
+            
+            <div id="rules-box">
+                <h3>Юридическое пользовательское соглашение</h3>
+                <p><b>1. Общие положения и акцепт:</b> Настоящее Соглашение определяет условия предоставления доступа к анонимному аудио- и видеочату Chatex. Начало использования сервиса означает полное и безоговорочное принятие всех пунктов данного регламента.</p>
+                
+                <p><b>2. Строгое возрастное ограничение (18+):</b> Сервис предназначен исключительно для совершеннолетних лиц. Если вам не исполнилось 18 лет, вы обязаны немедленно покинуть данную интернет-страницу и закрыть вкладку браузера.</p>
+                
+                <p><b>3. Полный отказ от ответственности Администрации:</b> Администрация сайта не берет на себя никакой ответственности за противоправные действия пользователей, моральный или материальный ущерб, а также за достоверность информации, передаваемой в ходе бесед.</p>
+                
+                <p><b>4. Архитектура P2P и конфиденциальность:</b> Соединение устанавливается напрямую между абонентами (Peer-to-Peer / WebRTC). Администрация технически не имеет доступа к аудио и видеопотокам, не производит их запись, трансляцию через собственные центральные медиасерверы или архивное хранение.</p>
+                
+                <p><b>5. Обязанности пользователя и запрещенный контент:</b> Пользователю категорически запрещается распространять материалы экстремистского характера, пропагандировать незаконные вещества, угрожать безопасности собеседников, заниматься шантажом, спамом или коммерческой рекламой.</p>
+                
+                <p><b>6. Прекращение сеанса при нарушениях:</b> Если собеседник нарушает нормы морали или правила сервиса, пользователь обязан незамедлительно разорвать соединение с помощью функциональных клавиш интерфейса и прекратить любое дальнейшее взаимодействие.</p>
+                
+                <p><b>7. Отсутствие персональных данных и регистрации:</b> Сервис функционирует без создания учетных записей, авторизации по электронной почте или номеру телефона. Идентификация личности пользователей на платформе не осуществляется.</p>
+                
+                <p><b>8. Ограничение работоспособности («Как есть»):</b> Услуги предоставляются по принципу «как есть» (as is). Администрация не гарантирует бесперебойную работу каналов связи, отсутствие сетевых задержек, лагов или внезапных обрывов соединения ввиду особенностей мобильных провайдеров.</p>
+                
+                <p><b>9. Право на блокировку доступа:</b> При фиксировании подозрительной сетевой активности, DDoS-атак или массовых жалоб со стороны других участников, Администрация оставляет за собой право ограничить доступ к ресурсу для конкретных IP-адресов без предварительного уведомления.</p>
+                
+                <p><b>10. Юрисдикция и изменение правил:</b> Все спорные вопросы регулируются в соответствии с действующим законодательством. Администрация имеет право в одностороннем порядке вносить правки в текст соглашения, которые вступают в силу немедленно после их публикации на сайте.</p>
+            </div>
+
+            <div class="checkbox-group" id="age-group">
+                <input type="checkbox" id="age-checkbox">
+                <label for="age-checkbox">Мне исполнилось 18 лет, я ознакомлен(а) с правилами и принимаю всю ответственность на себя</label>
+            </div>
+
+            <button id="accept-btn" disabled>СОГЛАСИТЬСЯ И ВОЙТИ</button>
         </div>
     </div>
 
@@ -538,18 +541,16 @@
     </header>
 
     <!-- Основная область -->
-    <div class="main-wrapper">
+    <div class="main-wrapper" id="main-wrapper">
         <div class="left-column">
             <div class="videos-container">
                 <div class="video-window">
                     <canvas class="tv-noise-canvas" id="tvNoiseCanvas"></canvas>
                     <video id="remoteVideo" autoplay playsinline webkit-playsinline></video>
                     <div class="video-status" id="remoteStatus">Поиск не запущен. Нажмите «ДАЛЕЕ».</div>
-                    
-                    <!-- Предупреждение об обрыве сети -->
                     <div class="network-warning" id="networkWarning">
                         <span>⚠️ Плохое соединение</span>
-                        <small>Ожидание восстановления сети собеседника...</small>
+                        <small>Ожидание сети собеседника...</small>
                     </div>
                 </div>
 
@@ -562,16 +563,16 @@
             <div class="control-buttons">
                 <button class="btn btn-start" id="nextBtn">ДАЛЕЕ</button>
                 <button class="btn btn-stop" id="stopBtn">СТОП</button>
-                <button class="btn btn-icon" id="muteBtn" title="Выключить микрофон">🎙️</button>
-                <button class="btn btn-icon" id="flipBtn" title="Сменить камеру">🔄</button>
+                <button class="btn-icon" id="muteBtn" title="Выключить микрофон">🎙️</button>
+                <button class="btn-icon" id="flipBtn" title="Сменить камеру">🔄</button>
             </div>
         </div>
 
         <div class="right-column">
-            <div class="chat-header">Текстовый диалог</div>
+            <div class="chat-header">💬</div>
             
             <div class="chat-body" id="chatBody">
-                <div class="msg-system">Подтвердите вход и нажмите «ДАЛЕЕ» для поиска реального собеседника.</div>
+                <div class="msg-system">Вы вошли в чат. Нажмите «ДАЛЕЕ» для поиска реального собеседника.</div>
             </div>
 
             <div class="chat-footer">
@@ -584,7 +585,45 @@
     </div>
 
     <script>
-        // --- ГЕНЕРАТОР ШУМА ТВ (ШУМ ТЕЛЕВИЗОРА ПРИ ПОИСКЕ) ---
+        const rulesBox = document.getElementById('rules-box');
+        const ageCheckbox = document.getElementById('age-checkbox');
+        const acceptBtn = document.getElementById('accept-btn');
+        const welcomeOverlay = document.getElementById('welcome-overlay');
+        const mainWrapper = document.getElementById('main-wrapper');
+        const ageGroup = document.getElementById('age-group');
+
+        let hasScrolledToBottom = false;
+
+        function checkAcceptance() {
+            if (hasScrolledToBottom && ageCheckbox.checked) {
+                acceptBtn.disabled = false;
+            } else {
+                acceptBtn.disabled = true;
+            }
+        }
+
+        rulesBox.addEventListener('scroll', () => {
+            if (rulesBox.scrollHeight - rulesBox.scrollTop <= rulesBox.clientHeight + 5) {
+                hasScrolledToBottom = true;
+                checkAcceptance();
+            }
+        });
+
+        ageGroup.addEventListener('click', (e) => {
+            if (e.target !== ageCheckbox) {
+                ageCheckbox.checked = !ageCheckbox.checked;
+            }
+            checkAcceptance();
+        });
+
+        ageCheckbox.addEventListener('change', checkAcceptance);
+
+        acceptBtn.addEventListener('click', async () => {
+            welcomeOverlay.style.display = 'none';
+            mainWrapper.style.display = 'flex';
+            await initMedia();
+        });
+
         const tvCanvas = document.getElementById('tvNoiseCanvas');
         const tvCtx = tvCanvas.getContext('2d');
         let noiseAnimationId = null;
@@ -601,9 +640,7 @@
             
             const imgData = tvCtx.createImageData(w, h);
             const buffer32 = new Uint32Array(imgData.data.buffer);
-            const len = buffer32.length;
-
-            for (let i = 0; i < len; i++) {
+            for (let i = 0; i < buffer32.length; i++) {
                 if (Math.random() < 0.5) {
                     const c = Math.floor(Math.random() * 225);
                     buffer32[i] = (255 << 24) | (c << 16) | (c << 8) | c;
@@ -630,7 +667,6 @@
             tvCanvas.style.display = 'none';
         }
 
-        // --- УВЕДОМЛЕНИЯ (ТОСТЫ) ---
         function showToast(message, type = 'info') {
             const container = document.getElementById('toastContainer');
             const toast = document.createElement('div');
@@ -646,21 +682,16 @@
             }, 4000);
         }
 
-        // --- МОНИТОРИНГ ИНТЕРНЕТА БРАУЗЕРА ---
         window.addEventListener('offline', () => {
             showToast('Нет интернета! Проверьте подключение.', 'error');
             addSystemMsg('Интернет соединение потеряно.', 'error');
         });
 
         window.addEventListener('online', () => {
-            showToast('Интернет восстановлен. Переподключение...', 'success');
-            if (!ws || ws.readyState !== WebSocket.OPEN) {
-                connectWebSocket();
-            }
+            showToast('Интернет восстановлен.', 'success');
+            if (!ws || ws.readyState !== WebSocket.OPEN) connectWebSocket();
         });
 
-        const ageModal = document.getElementById('ageModal');
-        const acceptBtn = document.getElementById('acceptBtn');
         const localVideo = document.getElementById('localVideo');
         const remoteVideo = document.getElementById('remoteVideo');
         const localStatus = document.getElementById('localStatus');
@@ -668,7 +699,6 @@
         const networkWarning = document.getElementById('networkWarning');
         const muteBtn = document.getElementById('muteBtn');
         const flipBtn = document.getElementById('flipBtn');
-        
         const nextBtn = document.getElementById('nextBtn');
         const stopBtn = document.getElementById('stopBtn');
         const chatBody = document.getElementById('chatBody');
@@ -687,16 +717,8 @@
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
                 { urls: 'stun:stun.cloudflare.com:3478' },
-                {
-                    urls: 'turn:openrelay.metered.ca:80',
-                    username: 'openrelay',
-                    credential: 'openrelay'
-                },
-                {
-                    urls: 'turn:openrelay.metered.ca:443',
-                    username: 'openrelay',
-                    credential: 'openrelay'
-                }
+                { urls: 'turn:openrelay.metered.ca:80', username: 'openrelay', credential: 'openrelay' },
+                { urls: 'turn:openrelay.metered.ca:443', username: 'openrelay', credential: 'openrelay' }
             ] 
         };
 
@@ -706,7 +728,6 @@
             const protocol = location.protocol === 'https:' ? 'wss://' : 'ws://';
             ws = new WebSocket(protocol + location.host);
             
-            ws.onopen = () => console.log("WebSocket соединен.");
             ws.onclose = () => setTimeout(connectWebSocket, 1500);
 
             ws.onmessage = async (event) => {
@@ -721,7 +742,7 @@
 
                     if (data.type === 'peer_found') {
                         addSystemMsg("Собеседник найден! Соединение...");
-                        remoteStatus.innerText = "Установка соединения с собеседником...";
+                        remoteStatus.innerText = "Установка соединения...";
                         cleanupPeerConnection();
                         createPeerConnection();
                         
@@ -755,32 +776,23 @@
                         chatBody.appendChild(msg);
                         chatBody.scrollTop = chatBody.scrollHeight;
                     } else if (data.type === 'peer_disconnected') {
-                        // ОБРАБОТКА СБРОСА СОБЕСЕДНИКОМ (Собеседник нажал Далее/Закрыл вкладку)
                         addSystemMsg("Собеседник переключил чат.");
                         cleanupPeerConnection();
                         startTVNoise();
-                        remoteStatus.innerText = "Собеседник отключился. Идем дальше...";
+                        remoteStatus.innerText = "Поиск следующего собеседника...";
                         remoteStatus.style.display = 'block';
                         
-                        // Автоматически запрашиваем поиск следующего собеседника
                         setTimeout(() => {
                             if (ws && ws.readyState === WebSocket.OPEN) {
                                 ws.send(JSON.stringify({ type: 'find_peer' }));
                             }
                         }, 1000);
                     }
-                } catch (err) {
-                    console.error("Ошибка передачи:", err);
-                }
+                } catch (err) {}
             };
         }
 
         connectWebSocket();
-
-        acceptBtn.addEventListener('click', async () => {
-            ageModal.style.display = 'none';
-            await initMedia();
-        });
 
         async function initMedia() {
             try {
@@ -792,54 +804,39 @@
                 localVideo.srcObject = localStream;
                 localVideo.style.display = 'block';
                 localStatus.style.display = 'none';
-                addSystemMsg("Камера и микрофон готовы.");
             } catch (err) {
                 try {
                     const audioStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
                     localStream = audioStream;
-                    localStatus.innerText = "Работает только микрофон.";
-                    addSystemMsg("Микрофон подключен.");
+                    localStatus.innerText = "Камера недоступна. Работает только микрофон.";
                 } catch (errAudio) {
-                    localStatus.innerText = "Устройства ввода недоступны.";
-                    addSystemMsg("Ошибка: Доступ к камере/микрофону отклонен.");
+                    localStatus.innerText = "Доступ к камере и микрофону отклонен.";
                 }
             }
         }
 
-        // --- ГЛУШЕНИЕ МИКРОФОНА ---
         muteBtn.addEventListener('click', () => {
             if (localStream && localStream.getAudioTracks().length > 0) {
                 isMuted = !isMuted;
-                localStream.getAudioTracks().forEach(track => {
-                    track.enabled = !isMuted;
-                });
+                localStream.getAudioTracks().forEach(track => { track.enabled = !isMuted; });
                 muteBtn.innerText = isMuted ? '🔇' : '🎙️';
                 muteBtn.style.background = isMuted ? 'rgba(239, 68, 68, 0.25)' : 'rgba(255, 255, 255, 0.05)';
-                showToast(isMuted ? 'Микрофон отключен' : 'Микрофон включен', isMuted ? 'warning' : 'success');
-            } else {
-                showToast('Микрофон недоступен', 'error');
             }
         });
 
-        // --- СМЕНА КАМЕРЫ ---
         flipBtn.addEventListener('click', async () => {
             if (!localStream) return;
             const oldVideoTrack = localStream.getVideoTracks()[0];
             if (!oldVideoTrack) return;
 
             currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
-
             try {
                 oldVideoTrack.stop();
                 let newStream;
                 try {
-                    newStream = await navigator.mediaDevices.getUserMedia({
-                        video: { facingMode: { exact: currentFacingMode } }, audio: false
-                    });
+                    newStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: currentFacingMode } }, audio: false });
                 } catch (e) {
-                    newStream = await navigator.mediaDevices.getUserMedia({
-                        video: { facingMode: currentFacingMode }, audio: false
-                    });
+                    newStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode }, audio: false });
                 }
 
                 const newVideoTrack = newStream.getVideoTracks()[0];
@@ -850,19 +847,13 @@
                 if (peerConnection) {
                     const senders = peerConnection.getSenders();
                     const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-                    if (videoSender) {
-                        await videoSender.replaceTrack(newVideoTrack);
-                    }
+                    if (videoSender) await videoSender.replaceTrack(newVideoTrack);
                 }
-                showToast(currentFacingMode === 'user' ? 'Селфи-камера' : 'Задняя камера', 'info');
-            } catch (err) {
-                showToast('Не удалось сменить камеру', 'error');
-            }
+            } catch (err) {}
         });
 
         function createPeerConnection() {
             peerConnection = new RTCPeerConnection(configuration);
-            
             if (localStream) {
                 localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
             } else {
@@ -872,10 +863,9 @@
 
             peerConnection.oniceconnectionstatechange = () => {
                 const state = peerConnection.iceConnectionState;
-
                 if (state === 'connected' || state === 'completed') {
                     networkWarning.style.display = 'none';
-                    stopTVNoise(); // ОСТАНАВЛИВАЕМ ШУМ ТВ, КОГДА ВИДЕО ПОДКЛЮЧЕНО
+                    stopTVNoise();
                 } else if (state === 'disconnected') {
                     networkWarning.style.display = 'flex';
                 } else if (state === 'failed') {
@@ -886,17 +876,13 @@
 
             peerConnection.ontrack = event => {
                 if (event.streams && event.streams[0]) {
-                    stopTVNoise(); // ВЫКЛЮЧАЕМ ПОМЕХИ
+                    stopTVNoise();
                     remoteVideo.srcObject = event.streams[0];
                     remoteVideo.style.display = 'block';
                     remoteStatus.style.display = 'none';
-                    
                     const playPromise = remoteVideo.play();
                     if (playPromise !== undefined) {
-                        playPromise.catch(() => {
-                            remoteVideo.muted = true;
-                            remoteVideo.play();
-                        });
+                        playPromise.catch(() => { remoteVideo.muted = true; remoteVideo.play(); });
                     }
                 }
             };
@@ -932,28 +918,25 @@
             networkWarning.style.display = 'none';
         }
 
-        // НАЖАТИЕ НА «ДАЛЕЕ»
         nextBtn.addEventListener('click', () => {
             if (!ws || ws.readyState !== WebSocket.OPEN) {
                 showToast("Сервер недоступен, подождите...", "error");
                 return;
             }
             cleanupPeerConnection();
-            startTVNoise(); // ВЛЮЧАЕМ ШУМ ТЕЛЕВИЗОРА ПРИ ПОИСКЕ
+            startTVNoise();
             remoteStatus.innerText = "Ищем свободного собеседника...";
             remoteStatus.style.display = 'block';
             addSystemMsg("Поиск нового собеседника...");
             ws.send(JSON.stringify({ type: 'find_peer' }));
         });
 
-        // НАЖАТИЕ НА «СТОП»
         stopBtn.addEventListener('click', () => {
             cleanupPeerConnection();
             stopTVNoise();
             remoteStatus.innerText = "Поиск остановлен.";
             remoteStatus.style.display = 'block';
             addSystemMsg("Вы остановили поиск.");
-            
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'stop_search' }));
             }
@@ -968,7 +951,6 @@
                 chatBody.appendChild(msg);
                 chatInput.value = '';
                 chatBody.scrollTop = chatBody.scrollHeight;
-
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ type: 'chat_message', text: text }));
                 }
