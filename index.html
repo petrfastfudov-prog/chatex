@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Chatex — Видеочат Рулетка</title>
     <style>
         :root {
@@ -15,6 +15,7 @@
             --accent-blue: #3b82f6;
             --accent-green: #22c55e;
             --accent-red: #ef4444;
+            --toast-bg: #1e293b;
         }
 
         * {
@@ -33,6 +34,41 @@
             height: 100vh;
             overflow: hidden;
         }
+
+        /* Всплывающие уведомления */
+        .toast-container {
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 10000;
+        }
+
+        .toast {
+            background: var(--toast-bg);
+            border-left: 4px solid var(--accent-blue);
+            color: #fff;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            font-size: 0.9rem;
+            transform: translateX(120%);
+            transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+            opacity: 0;
+            max-width: 300px;
+            word-wrap: break-word;
+        }
+
+        .toast.show {
+            transform: translateX(0);
+            opacity: 1;
+        }
+
+        .toast.error { border-left-color: var(--accent-red); }
+        .toast.success { border-left-color: var(--accent-green); }
+        .toast.warning { border-left-color: #f59e0b; }
 
         /* Заставка 18+ */
         .modal-overlay {
@@ -191,6 +227,7 @@
             flex-direction: column;
             gap: 12px;
             min-height: 0;
+            position: relative;
         }
 
         .video-window {
@@ -223,6 +260,33 @@
             line-height: 1.5;
             padding: 20px;
             max-width: 85%;
+        }
+
+        /* Плашка лагов сети */
+        .network-warning {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(15, 23, 42, 0.88);
+            color: #f59e0b;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 20px;
+            z-index: 10;
+            backdrop-filter: blur(6px);
+        }
+
+        .network-warning span {
+            font-size: 1.1rem;
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+
+        .network-warning small {
+            color: var(--text-muted);
+            font-size: 0.85rem;
         }
 
         /* Кнопки управления */
@@ -261,6 +325,20 @@
         }
         .btn-stop:hover {
             background: #dc2626;
+        }
+
+        .btn-icon {
+            flex: 0 0 54px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--card-border);
+            font-size: 1.3rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-icon:hover {
+            background: rgba(255, 255, 255, 0.1);
         }
 
         /* Правая колонка (Чат) */
@@ -308,6 +386,12 @@
             line-height: 1.4;
         }
 
+        .msg-error {
+            color: var(--accent-red);
+            font-size: 0.85rem;
+            font-weight: bold;
+        }
+
         .chat-footer {
             border-top: 1px solid var(--card-border);
             padding: 14px;
@@ -350,9 +434,53 @@
         .send-btn:hover {
             background: #2563eb;
         }
+
+        /* ИСКЛЮЧИТЕЛЬНО ДЛЯ МОБИЛЬНЫХ ЭКРАНОВ (ДО 768px): Авто-адаптация без изменения дизайна */
+        @media (max-width: 768px) {
+            .main-wrapper {
+                flex-direction: column;
+                padding: 10px;
+                gap: 10px;
+            }
+
+            .left-column {
+                width: 100%;
+                flex: 1;
+            }
+
+            .videos-container {
+                display: block;
+            }
+
+            .video-window:first-child {
+                width: 100%;
+                height: 100%;
+            }
+
+            /* Свое видео становится компактным оверлеем в углу */
+            .video-window:last-child {
+                position: absolute;
+                bottom: 12px;
+                right: 12px;
+                width: 110px;
+                height: 150px;
+                z-index: 5;
+                border-radius: 10px;
+                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
+                border: 2px solid rgba(255, 255, 255, 0.15);
+            }
+
+            .right-column {
+                height: 200px;
+                flex: none;
+            }
+        }
     </style>
 </head>
 <body>
+
+    <!-- Уведомления -->
+    <div class="toast-container" id="toastContainer"></div>
 
     <!-- Модальное окно 18+ -->
     <div class="modal-overlay" id="ageModal">
@@ -387,12 +515,18 @@
         <div class="left-column">
             <div class="videos-container">
                 <div class="video-window">
-                    <video id="remoteVideo" autoplay playsinline></video>
+                    <video id="remoteVideo" autoplay playsinline webkit-playsinline></video>
                     <div class="video-status" id="remoteStatus">Поиск не запущен. Нажмите «ДАЛЕЕ».</div>
+                    
+                    <!-- Предупреждение об обрыве сети -->
+                    <div class="network-warning" id="networkWarning">
+                        <span>⚠️ Плохое соединение</span>
+                        <small>Ожидание восстановления сети собеседника...</small>
+                    </div>
                 </div>
 
                 <div class="video-window">
-                    <video id="localVideo" autoplay playsinline muted></video>
+                    <video id="localVideo" autoplay playsinline webkit-playsinline muted></video>
                     <div class="video-status" id="localStatus">Определение устройств...</div>
                 </div>
             </div>
@@ -400,6 +534,7 @@
             <div class="control-buttons">
                 <button class="btn btn-start" id="nextBtn">ДАЛЕЕ</button>
                 <button class="btn btn-stop" id="stopBtn">СТОП</button>
+                <button class="btn btn-icon" id="muteBtn" title="Выключить микрофон">🎙️</button>
             </div>
         </div>
 
@@ -420,12 +555,43 @@
     </div>
 
     <script>
+        // --- УВЕДОМЛЕНИЯ (ТОСТЫ) ---
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerText = message;
+            container.appendChild(toast);
+            
+            requestAnimationFrame(() => toast.classList.add('show'));
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        // --- МОНИТОРИНГ ИНТЕРНЕТА БРАУЗЕРА ---
+        window.addEventListener('offline', () => {
+            showToast('Нет интернета! Проверьте подключение.', 'error');
+            addSystemMsg('Интернет соединение потеряно.', 'error');
+        });
+
+        window.addEventListener('online', () => {
+            showToast('Интернет восстановлен. Переподключение...', 'success');
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                connectWebSocket();
+            }
+        });
+
         const ageModal = document.getElementById('ageModal');
         const acceptBtn = document.getElementById('acceptBtn');
         const localVideo = document.getElementById('localVideo');
         const remoteVideo = document.getElementById('remoteVideo');
         const localStatus = document.getElementById('localStatus');
         const remoteStatus = document.getElementById('remoteStatus');
+        const networkWarning = document.getElementById('networkWarning');
+        const muteBtn = document.getElementById('muteBtn');
         
         const nextBtn = document.getElementById('nextBtn');
         const stopBtn = document.getElementById('stopBtn');
@@ -437,29 +603,39 @@
         let peerConnection = null;
         let ws = null;
         let iceCandidatesQueue = [];
+        let isMuted = false;
 
-        // Быстрые и надёжные STUN/TURN серверы
         const configuration = { 
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' },
-                { urls: 'stun:stun.cloudflare.com:3478' }
+                { urls: 'stun:stun.cloudflare.com:3478' },
+                {
+                    urls: 'turn:openrelay.metered.ca:80',
+                    username: 'openrelay',
+                    credential: 'openrelay'
+                },
+                {
+                    urls: 'turn:openrelay.metered.ca:443',
+                    username: 'openrelay',
+                    credential: 'openrelay'
+                },
+                {
+                    urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+                    username: 'openrelay',
+                    credential: 'openrelay'
+                }
             ] 
         };
 
         function connectWebSocket() {
+            if (ws && ws.readyState !== WebSocket.CLOSED) return;
+
             const protocol = location.protocol === 'https:' ? 'wss://' : 'ws://';
             ws = new WebSocket(protocol + location.host);
             
-            ws.onopen = () => {
-                console.log("WebSocket соединен.");
-            };
-
-            ws.onclose = () => {
-                console.log("WebSocket закрылся, переподключение...");
-                setTimeout(connectWebSocket, 1500);
-            };
+            ws.onopen = () => console.log("WebSocket соединен.");
+            ws.onclose = () => setTimeout(connectWebSocket, 1500);
 
             ws.onmessage = async (event) => {
                 try {
@@ -510,7 +686,7 @@
                         cleanupPeerConnection();
                     }
                 } catch (err) {
-                    console.error("Ошибка при приеме данных:", err);
+                    console.error("Ошибка передачи:", err);
                 }
             };
         }
@@ -525,7 +701,7 @@
         async function initMedia() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: true,
+                    video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
                     audio: true
                 });
                 localStream = stream;
@@ -534,32 +710,70 @@
                 localStatus.style.display = 'none';
                 addSystemMsg("Камера и микрофон успешно подключены.");
             } catch (err) {
-                console.warn("Ошибка подключения полного медиапотока, пробуем только аудио...", err);
                 try {
                     const audioStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
                     localStream = audioStream;
-                    localStatus.innerText = "Работает только микрофон (без видеокамеры).";
-                    addSystemMsg("Микрофон подключен (без видео).");
+                    localStatus.innerText = "Работает только микрофон (без камеры).";
+                    addSystemMsg("Микрофон подключен.");
                 } catch (errAudio) {
                     localStatus.innerText = "Устройства ввода (камера/микрофон) недоступны.";
-                    addSystemMsg("Предупреждение: Доступ к медиаустройствам отклонен.");
+                    addSystemMsg("Предупреждение: Камера или микрофон недоступны.");
                 }
             }
         }
+
+        // ВЫКЛЮЧЕНИЕ / ВКЛЮЧЕНИЕ МИКРОФОНА
+        muteBtn.addEventListener('click', () => {
+            if (localStream && localStream.getAudioTracks().length > 0) {
+                isMuted = !isMuted;
+                localStream.getAudioTracks()[0].enabled = !isMuted;
+                muteBtn.innerText = isMuted ? '🔇' : '🎙️';
+                muteBtn.style.background = isMuted ? 'rgba(239, 68, 68, 0.25)' : 'rgba(255, 255, 255, 0.05)';
+                showToast(isMuted ? 'Микрофон выключен' : 'Микрофон включен', isMuted ? 'warning' : 'success');
+            } else {
+                showToast('Микрофон недоступен', 'error');
+            }
+        });
 
         function createPeerConnection() {
             peerConnection = new RTCPeerConnection(configuration);
             
             if (localStream) {
                 localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+            } else {
+                peerConnection.addTransceiver('video', { direction: 'recvonly' });
+                peerConnection.addTransceiver('audio', { direction: 'recvonly' });
             }
+
+            // МОНИТОРИНГ ЛАГОВ И ОБРЫВОВ СВЯЗИ СОБЕСЕДНИКА
+            peerConnection.oniceconnectionstatechange = () => {
+                const state = peerConnection.iceConnectionState;
+
+                if (state === 'connected' || state === 'completed') {
+                    networkWarning.style.display = 'none';
+                } else if (state === 'disconnected') {
+                    networkWarning.style.display = 'flex';
+                    addSystemMsg('У собеседника проблемы с сетью. Ожидаем восстановление...', 'msg-error');
+                } else if (state === 'failed') {
+                    networkWarning.style.display = 'none';
+                    addSystemMsg('Соединение разорвано из-за потери сети.', 'msg-error');
+                    cleanupPeerConnection();
+                }
+            };
 
             peerConnection.ontrack = event => {
                 if (event.streams && event.streams[0]) {
                     remoteVideo.srcObject = event.streams[0];
                     remoteVideo.style.display = 'block';
                     remoteStatus.style.display = 'none';
-                    remoteVideo.play().catch(e => console.log("Автозапуск видео:", e));
+                    
+                    const playPromise = remoteVideo.play();
+                    if (playPromise !== undefined) {
+                        playPromise.catch(error => {
+                            remoteVideo.muted = true;
+                            remoteVideo.play();
+                        });
+                    }
                 }
             };
 
@@ -578,7 +792,7 @@
                         await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
                     }
                 } catch (e) {
-                    console.error("Ошибка обработки пакета ICE:", e);
+                    console.error("Ошибка очереди ICE:", e);
                 }
             }
         }
@@ -595,11 +809,12 @@
             remoteVideo.style.display = 'none';
             remoteStatus.style.display = 'block';
             remoteStatus.innerText = "Поиск не запущен. Нажмите «ДАЛЕЕ».";
+            networkWarning.style.display = 'none';
         }
 
         nextBtn.addEventListener('click', () => {
             if (!ws || ws.readyState !== WebSocket.OPEN) {
-                addSystemMsg("Подключение к серверу... Попробуйте через секунду.");
+                showToast("Сервер недоступен, подождите...", "error");
                 return;
             }
             cleanupPeerConnection();
@@ -640,9 +855,9 @@
             if (e.key === 'Enter') sendMessage();
         });
 
-        function addSystemMsg(text) {
+        function addSystemMsg(text, className = 'msg-system') {
             const sys = document.createElement('div');
-            sys.className = 'msg-system';
+            sys.className = className;
             sys.innerText = text;
             chatBody.appendChild(sys);
             chatBody.scrollTop = chatBody.scrollHeight;
