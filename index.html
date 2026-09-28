@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Chatex — Видеочат Рулетка</title>
     <style>
         :root {
@@ -23,16 +23,19 @@
             margin: 0;
             padding: 0;
             font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            -webkit-tap-highlight-color: transparent;
         }
 
-        body {
+        html, body {
+            height: 100vh;
+            height: 100dvh;
+            width: 100%;
+            overflow: hidden;
             background: var(--bg-main);
             background-attachment: fixed;
             color: var(--text-primary);
             display: flex;
             flex-direction: column;
-            height: 100vh;
-            overflow: hidden;
         }
 
         /* Всплывающие уведомления */
@@ -77,6 +80,7 @@
             left: 0;
             width: 100vw;
             height: 100vh;
+            height: 100dvh;
             background: rgba(2, 6, 23, 0.94);
             backdrop-filter: blur(12px);
             display: flex;
@@ -292,7 +296,7 @@
         /* Кнопки управления */
         .control-buttons {
             display: flex;
-            gap: 12px;
+            gap: 10px;
             flex-shrink: 0;
         }
 
@@ -328,7 +332,7 @@
         }
 
         .btn-icon {
-            flex: 0 0 54px;
+            flex: 0 0 52px;
             background: rgba(255, 255, 255, 0.05);
             border: 1px solid var(--card-border);
             font-size: 1.3rem;
@@ -372,6 +376,7 @@
             display: flex;
             flex-direction: column;
             gap: 12px;
+            -webkit-overflow-scrolling: touch;
         }
 
         .msg-system {
@@ -394,7 +399,7 @@
 
         .chat-footer {
             border-top: 1px solid var(--card-border);
-            padding: 14px;
+            padding: 12px 14px;
             background: rgba(2, 6, 23, 0.5);
             flex-shrink: 0;
         }
@@ -404,6 +409,7 @@
             gap: 10px;
         }
 
+        /* КРИТИЧЕСКОЙ ФИКС ДЛЯ IPHONE: font-size строго 16px отключает авто-зум Safari */
         .chat-input {
             flex: 1;
             padding: 12px 16px;
@@ -411,9 +417,10 @@
             border: 1px solid var(--card-border);
             color: #fff;
             border-radius: 8px;
-            font-size: 0.95rem;
+            font-size: 16px !important; 
             outline: none;
             transition: border-color 0.2s;
+            -webkit-appearance: none;
         }
 
         .chat-input:focus {
@@ -421,7 +428,7 @@
         }
 
         .send-btn {
-            padding: 0 24px;
+            padding: 0 20px;
             background: var(--accent-blue);
             color: #fff;
             border: none;
@@ -429,13 +436,14 @@
             font-weight: bold;
             cursor: pointer;
             transition: background 0.2s;
+            font-size: 0.95rem;
         }
 
         .send-btn:hover {
             background: #2563eb;
         }
 
-        /* ИСКЛЮЧИТЕЛЬНО ДЛЯ МОБИЛЬНЫХ ЭКРАНОВ (ДО 768px): Авто-адаптация без изменения дизайна */
+        /* Адаптация под мобильные без изменения ПК-дизайна */
         @media (max-width: 768px) {
             .main-wrapper {
                 flex-direction: column;
@@ -457,7 +465,6 @@
                 height: 100%;
             }
 
-            /* Свое видео становится компактным оверлеем в углу */
             .video-window:last-child {
                 position: absolute;
                 bottom: 12px;
@@ -471,7 +478,7 @@
             }
 
             .right-column {
-                height: 200px;
+                height: 220px;
                 flex: none;
             }
         }
@@ -535,6 +542,7 @@
                 <button class="btn btn-start" id="nextBtn">ДАЛЕЕ</button>
                 <button class="btn btn-stop" id="stopBtn">СТОП</button>
                 <button class="btn btn-icon" id="muteBtn" title="Выключить микрофон">🎙️</button>
+                <button class="btn btn-icon" id="flipBtn" title="Сменить камеру">🔄</button>
             </div>
         </div>
 
@@ -547,7 +555,7 @@
 
             <div class="chat-footer">
                 <div class="input-wrapper">
-                    <input type="text" class="chat-input" id="chatInput" placeholder="Введите сообщение и нажмите Enter...">
+                    <input type="text" class="chat-input" id="chatInput" placeholder="Введите сообщение...">
                     <button class="send-btn" id="sendBtn">Отправить</button>
                 </div>
             </div>
@@ -592,6 +600,7 @@
         const remoteStatus = document.getElementById('remoteStatus');
         const networkWarning = document.getElementById('networkWarning');
         const muteBtn = document.getElementById('muteBtn');
+        const flipBtn = document.getElementById('flipBtn');
         
         const nextBtn = document.getElementById('nextBtn');
         const stopBtn = document.getElementById('stopBtn');
@@ -604,6 +613,7 @@
         let ws = null;
         let iceCandidatesQueue = [];
         let isMuted = false;
+        let currentFacingMode = 'user'; // 'user' - селфи, 'environment' - задняя
 
         const configuration = { 
             iceServers: [
@@ -701,7 +711,7 @@
         async function initMedia() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+                    video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: currentFacingMode },
                     audio: true
                 });
                 localStream = stream;
@@ -722,16 +732,70 @@
             }
         }
 
-        // ВЫКЛЮЧЕНИЕ / ВКЛЮЧЕНИЕ МИКРОФОНА
+        // --- ТОЧНОЕ ГЛУШЕНИЕ МИКРОФОНА ---
         muteBtn.addEventListener('click', () => {
             if (localStream && localStream.getAudioTracks().length > 0) {
                 isMuted = !isMuted;
-                localStream.getAudioTracks()[0].enabled = !isMuted;
+                localStream.getAudioTracks().forEach(track => {
+                    track.enabled = !isMuted;
+                });
                 muteBtn.innerText = isMuted ? '🔇' : '🎙️';
                 muteBtn.style.background = isMuted ? 'rgba(239, 68, 68, 0.25)' : 'rgba(255, 255, 255, 0.05)';
-                showToast(isMuted ? 'Микрофон выключен' : 'Микрофон включен', isMuted ? 'warning' : 'success');
+                showToast(isMuted ? 'Микрофон отключен (собеседник вас не слышит)' : 'Микрофон включен', isMuted ? 'warning' : 'success');
             } else {
                 showToast('Микрофон недоступен', 'error');
+            }
+        });
+
+        // --- СМЕНА КАМЕРЫ (ФРОНТАЛЬНАЯ / ЗАДНЯЯ) ---
+        flipBtn.addEventListener('click', async () => {
+            if (!localStream) {
+                showToast('Камера не активирована', 'error');
+                return;
+            }
+
+            const oldVideoTrack = localStream.getVideoTracks()[0];
+            if (!oldVideoTrack) {
+                showToast('Видеопоток отсутствует', 'error');
+                return;
+            }
+
+            currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
+
+            try {
+                oldVideoTrack.stop();
+
+                let newStream;
+                try {
+                    newStream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: { exact: currentFacingMode } },
+                        audio: false
+                    });
+                } catch (e) {
+                    newStream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: currentFacingMode },
+                        audio: false
+                    });
+                }
+
+                const newVideoTrack = newStream.getVideoTracks()[0];
+                localStream.removeTrack(oldVideoTrack);
+                localStream.addTrack(newVideoTrack);
+                localVideo.srcObject = localStream;
+
+                // Заменяем трек в активном WebRTC соединении без разрыва звонка
+                if (peerConnection) {
+                    const senders = peerConnection.getSenders();
+                    const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+                    if (videoSender) {
+                        await videoSender.replaceTrack(newVideoTrack);
+                    }
+                }
+
+                showToast(currentFacingMode === 'user' ? 'Селфи-камера' : 'Задняя камера', 'info');
+            } catch (err) {
+                console.error("Ошибка переключения камеры:", err);
+                showToast('Не удалось переключить камеру', 'error');
             }
         });
 
@@ -745,7 +809,6 @@
                 peerConnection.addTransceiver('audio', { direction: 'recvonly' });
             }
 
-            // МОНИТОРИНГ ЛАГОВ И ОБРЫВОВ СВЯЗИ СОБЕСЕДНИКА
             peerConnection.oniceconnectionstatechange = () => {
                 const state = peerConnection.iceConnectionState;
 
@@ -829,7 +892,7 @@
             remoteStatus.innerText = "Поиск остановлен.";
             addSystemMsg("Вы остановили поиск.");
             
-            if (ws && ws.readyState === WebSocket.OPEN) {
+            if (ws && ws.readyState !== WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'stop_search' }));
             }
         });
@@ -844,7 +907,7 @@
                 chatInput.value = '';
                 chatBody.scrollTop = chatBody.scrollHeight;
 
-                if (ws && ws.readyState === WebSocket.OPEN && peerConnection) {
+                if (ws && ws.readyState !== WebSocket.OPEN && peerConnection) {
                     ws.send(JSON.stringify({ type: 'chat_message', text: text }));
                 }
             }
@@ -853,6 +916,14 @@
         sendBtn.addEventListener('click', sendMessage);
         chatInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendMessage();
+        });
+
+        // ПРЕДОТВРАЩЕНИЕ СДВИГА ЭКРАНА В SAFARI ПРИ ФОКУСЕ НА ИНПУТ
+        chatInput.addEventListener('focus', () => {
+            setTimeout(() => {
+                chatBody.scrollTop = chatBody.scrollHeight;
+                window.scrollTo(0, 0);
+            }, 300);
         });
 
         function addSystemMsg(text, className = 'msg-system') {
