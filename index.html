@@ -178,37 +178,6 @@
             box-shadow: 0 4px 14px rgba(34, 197, 94, 0.3);
         }
 
-        /* Уведомления */
-        .toast-container {
-            position: fixed;
-            top: 70px;
-            right: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            z-index: 10000;
-        }
-
-        .toast {
-            background: var(--toast-bg);
-            border-left: 4px solid var(--accent-blue);
-            color: #fff;
-            padding: 12px 20px;
-            border-radius: 8px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-            font-size: 0.9rem;
-            transform: translateX(120%);
-            transition: transform 0.3s ease-out, opacity 0.3s ease-out;
-            opacity: 0;
-            max-width: 300px;
-            word-wrap: break-word;
-        }
-
-        .toast.show { transform: translateX(0); opacity: 1; }
-        .toast.error { border-left-color: var(--accent-red); }
-        .toast.success { border-left-color: var(--accent-green); }
-        .toast.warning { border-left-color: #f59e0b; }
-
         /* Шапка */
         header {
             height: 58px;
@@ -297,6 +266,7 @@
             overflow: hidden;
         }
 
+        /* ЖЕСТКИЙ СБРОС ЗЕРКАЛИРОВАНИЯ ДЛЯ ВСЕХ ВИДЕО ТЕГОВ */
         video, #localVideo, #remoteVideo {
             width: 100%;
             height: 100%;
@@ -492,8 +462,6 @@
 </head>
 <body>
 
-    <div class="toast-container" id="toastContainer"></div>
-
     <!-- Заставка с правилами -->
     <div id="welcome-overlay">
         <div id="welcome-modal">
@@ -664,28 +632,11 @@
             tvCanvas.style.display = 'none';
         }
 
-        function showToast(message, type = 'info') {
-            const container = document.getElementById('toastContainer');
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            toast.innerText = message;
-            container.appendChild(toast);
-            
-            requestAnimationFrame(() => toast.classList.add('show'));
-
-            setTimeout(() => {
-                toast.classList.remove('show');
-                setTimeout(() => toast.remove(), 300);
-            }, 4000);
-        }
-
         window.addEventListener('offline', () => {
-            showToast('Нет интернета! Проверьте подключение.', 'error');
             addSystemMsg('Интернет соединение потеряно.', 'error');
         });
 
         window.addEventListener('online', () => {
-            showToast('Интернет восстановлен.', 'success');
             if (!ws || ws.readyState !== WebSocket.OPEN) connectWebSocket();
         });
 
@@ -710,7 +661,7 @@
         let currentFacingMode = 'user';
         let mediaInitialized = false;
 
-        // --- УМНЫЙ ЗАЩИЩЕННЫЙ ФИЛЬТР (БЕЗ ЛОЖНЫХ СРАБАТЫВАНИЙ НА ЛИЦО И РУКИ) ---
+        // --- УМНЫЙ ЗАЩИЩЕННЫЙ ФИЛЬТР (БЕЗ УВЕДОМЛЕНИЙ И ЗЕРКАЛА) ---
         let nsfwModel = null;
         let nsfwInterval = null;
         let isBlackoutActive = false;
@@ -724,22 +675,17 @@
             try {
                 if (window.nsfwjs) {
                     nsfwModel = await nsfwjs.load();
-                    console.log("NSFWJS Модель успешно загружена");
                 }
-            } catch (e) {
-                console.warn("Ошибка загрузки NSFWJS:", e);
-            }
+            } catch (e) {}
         }
         initNSFWModel();
 
-        // Проверяем распределение кожи с отсечением лиц и кистей (фокус на центр/низ кадра)
         function calculateTargetSkinRatio(ctx, width, height) {
             const imgData = ctx.getImageData(0, 0, width, height);
             const data = imgData.data;
             let centerSkinPixels = 0;
             let totalCenterPixels = 0;
 
-            // Сканируем преимущественно центральную и нижнюю часть кадра (торс), игнорируя верх (лицо)
             const startY = Math.floor(height * 0.25); 
 
             for (let y = startY; y < height; y += 4) {
@@ -779,28 +725,20 @@
                         hentai = predictions.find(p => p.className === 'Hentai')?.probability || 0;
                     }
 
-                    // Порог поднят до 42% по торсу, чтобы лицо, язык или руки крупным планом не триггерили блэкаут
                     const violationDetected = (skinRatio > 0.42 || porn > 0.25 || sexy > 0.45 || hentai > 0.30);
 
                     if (violationDetected) {
                         if (!isBlackoutActive) {
                             isBlackoutActive = true;
                             remoteVideo.style.display = 'none';
-                            remoteStatus.innerText = "🛑 СИГНАЛ СКРЫТ: NSFW Blackout";
-                            remoteStatus.style.display = 'block';
-                            showToast("Обнаружен запрещенный контент — видео скрыто.", "warning");
                         }
                     } else {
                         if (isBlackoutActive) {
                             isBlackoutActive = false;
                             remoteVideo.style.display = 'block';
-                            remoteStatus.style.display = 'none';
-                            showToast("Контент в норме — трансляция восстановлена.", "success");
                         }
                     }
-                } catch (e) {
-                    console.error("Ошибка сканирования:", e);
-                }
+                } catch (e) {}
             }, 800); 
         }
 
@@ -1030,9 +968,7 @@
 
                 const playPromise = remoteVideo.play();
                 if (playPromise !== undefined) {
-                    playPromise.catch((e) => { 
-                        console.warn("Autoplay block:", e);
-                    });
+                    playPromise.catch((e) => {});
                 }
             };
 
@@ -1069,10 +1005,7 @@
         }
 
         nextBtn.addEventListener('click', async () => {
-            if (!ws || ws.readyState !== WebSocket.OPEN) {
-                showToast("Сервер недоступен, подождите...", "error");
-                return;
-            }
+            if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
             if (!mediaInitialized) {
                 localStatus.innerText = "Запрос доступа к камере...";
