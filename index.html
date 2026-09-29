@@ -199,6 +199,8 @@
             font-size: 1.3rem;
             font-weight: bold;
             letter-spacing: 0.5px;
+            cursor: pointer;
+            user-select: none;
         }
 
         .brand-icon {
@@ -212,6 +214,19 @@
             justify-content: center;
             font-size: 1.1rem;
             box-shadow: 0 0 12px rgba(59, 130, 246, 0.5);
+        }
+
+        /* Стиль для пасхалки */
+        #creator-tag {
+            font-size: 0.8rem;
+            color: #38bdf8;
+            background: rgba(56, 189, 248, 0.1);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            padding: 3px 8px;
+            border-radius: 6px;
+            margin-left: 10px;
+            display: none;
+            font-weight: normal;
         }
 
         .header-meta { font-size: 0.85rem; color: var(--text-muted); }
@@ -527,9 +542,10 @@
 
     <!-- Шапка -->
     <header>
-        <div class="brand">
+        <div class="brand" id="brandTitle">
             <div class="brand-icon">⚡</div>
             <span>Chatex</span>
+            <span id="creator-tag">Этот чат создал Пётр</span>
         </div>
         <div class="header-meta">
             <span>Онлайн: <strong class="online-count">1</strong></span>
@@ -543,7 +559,7 @@
                 <div class="video-window">
                     <canvas class="tv-noise-canvas" id="tvNoiseCanvas"></canvas>
                     <video id="remoteVideo" autoplay playsinline webkit-playsinline></video>
-                    <!-- Красивый оверлей блюра вместо черного экрана -->
+                    <!-- Оверлей блюра -->
                     <div class="nsfw-blur-overlay" id="nsfwBlurOverlay">
                         <div class="badge-18">18+ ВНИМАНИЕ</div>
                         <p>Контент скрыт системой защиты</p>
@@ -551,7 +567,7 @@
                     <div class="video-status" id="remoteStatus" style="display: none;">Поиск не запущен. Нажмите «НАЧАТЬ».</div>
                     <div class="network-warning" id="networkWarning">
                         <span>⚠️ Плохое соединение</span>
-                        <small>Ожидание сети собеседника...</small>
+                        <small>Восстановление связи с собеседником...</small>
                     </div>
                 </div>
 
@@ -586,6 +602,18 @@
     </div>
 
     <script>
+        // --- ПАСХАЛКА: 5 КЛИКОВ НА НАЗВАНИЕ ---
+        const brandTitle = document.getElementById('brandTitle');
+        const creatorTag = document.getElementById('creator-tag');
+        let clickCount = 0;
+
+        brandTitle.addEventListener('click', () => {
+            clickCount++;
+            if (clickCount >= 5) {
+                creatorTag.style.display = 'inline-block';
+            }
+        });
+
         const rulesBox = document.getElementById('rules-box');
         const ageCheckbox = document.getElementById('age-checkbox');
         const acceptBtn = document.getElementById('accept-btn');
@@ -697,11 +725,11 @@
         let currentFacingMode = 'user';
         let mediaInitialized = false;
 
-        // --- УЛУЧШЕННЫЙ ТОЧНЫЙ NSFW ФИЛЬТР С БЛЮРОМ (ИЗБЕГАЕМ ЛОЖНЫХ СРАБАТЫВАНИЙ НА ВОЗДУХ) ---
+        // --- УЛУЧШЕННЫЙ NSFW ФИЛЬТР (УМЕНЬШЕНЫ ПОРОГИ ДЛЯ ЧУВСТВИТЕЛЬНОСТИ) ---
         let nsfwModel = null;
         let nsfwInterval = null;
         let isBlurActive = false;
-        let consecutiveViolations = 0; // Требуем подтверждения в несколько кадров, чтобы исключить ложные срабатывания
+        let consecutiveViolations = 0;
 
         const offCanvas = document.createElement('canvas');
         offCanvas.width = 224;
@@ -732,12 +760,11 @@
                     const sexy = predictions.find(p => p.className === 'Sexy')?.probability || 0;
                     const hentai = predictions.find(p => p.className === 'Hentai')?.probability || 0;
 
-                    // Порог настроен строго на контент, исключая ложные срабатывания на фон/воздух
-                    const violationDetected = (porn > 0.55 || hentai > 0.50 || sexy > 0.75);
+                    // Установлены более чувствительные пороги для точного перехвата обнаженного торса/нюд-контента
+                    const violationDetected = (porn > 0.40 || hentai > 0.35 || sexy > 0.50);
 
                     if (violationDetected) {
                         consecutiveViolations++;
-                        // Включаем блюр только если нарушение зафиксировано подряд несколько раз (убирает ложные дергания)
                         if (consecutiveViolations >= 2 && !isBlurActive) {
                             isBlurActive = true;
                             nsfwBlurOverlay.style.display = 'flex';
@@ -750,7 +777,7 @@
                         }
                     }
                 } catch (e) {}
-            }, 1000); // Проверка раз в секунду для стабильности
+            }, 1000);
         }
 
         function stopNSFWMonitoring() {
@@ -763,7 +790,7 @@
             nsfwBlurOverlay.style.display = 'none';
         }
 
-        // --- РАСШИРЕННЫЕ TURN/STUN СЕРВЕРЫ ДЛЯ СВЯЗИ ЧЕРЕЗ МОБИЛЬНЫЕ СЕТИ И LTE/5G ---
+        // --- TURN/STUN КОНФИГУРАЦИЯ ДЛЯ СВЯЗИ МОБИЛЬНЫЙ ИНТЕРНЕТ ↔ WI-FI ---
         const configuration = { 
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
@@ -802,7 +829,10 @@
                         createPeerConnection();
                         
                         if (data.initiator) {
-                            const offer = await peerConnection.createOffer();
+                            const offer = await peerConnection.createOffer({
+                                offerToReceiveAudio: true,
+                                offerToReceiveVideo: true
+                            });
                             await peerConnection.setLocalDescription(offer);
                             ws.send(JSON.stringify({ type: 'offer', offer: offer }));
                         }
@@ -853,7 +883,15 @@
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: currentFacingMode },
-                    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+                    audio: { 
+                        echoCancellation: true, 
+                        noiseSuppression: true, 
+                        autoGainControl: true,
+                        googEchoCancellation: true,
+                        googAutoGainControl: true,
+                        googNoiseSuppression: true,
+                        googHighpassFilter: true
+                    }
                 });
                 localStream = stream;
                 
@@ -892,7 +930,11 @@
 
             if (localStream) {
                 localStream.getTracks().forEach(track => {
-                    peerConnection.addTrack(track, localStream);
+                    const sender = peerConnection.addTrack(track, localStream);
+                    // Устанавливаем contentHint для адаптации видеопотока под мобильные сети и предотвращения черных экранов
+                    if (track.kind === 'video' && 'contentHint' in sender) {
+                        sender.contentHint = 'motion';
+                    }
                 });
             }
 
@@ -912,13 +954,28 @@
                 }
             };
 
-            peerConnection.onconnectionstatechange = () => {
-                if (peerConnection) {
-                    if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
-                        networkWarning.style.display = 'flex';
-                    } else if (peerConnection.connectionState === 'connected') {
-                        networkWarning.style.display = 'none';
+            // Автоматическое восстановление соединения (IceRestart) при кратковременных обрывах сотовой связи
+            let isRestarting = false;
+            peerConnection.onconnectionstatechange = async () => {
+                if (!peerConnection) return;
+                
+                if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
+                    networkWarning.style.display = 'flex';
+                    
+                    if (!isRestarting && peerConnection.connectionState === 'failed') {
+                        isRestarting = true;
+                        try {
+                            const offer = await peerConnection.createOffer({ iceRestart: true });
+                            await peerConnection.setLocalDescription(offer);
+                            if (ws && ws.readyState === WebSocket.OPEN) {
+                                ws.send(JSON.stringify({ type: 'offer', offer: offer }));
+                            }
+                        } catch (e) {}
+                        setTimeout(() => { isRestarting = false; }, 4000);
                     }
+                } else if (peerConnection.connectionState === 'connected') {
+                    networkWarning.style.display = 'none';
+                    isRestarting = false;
                 }
             };
         }
