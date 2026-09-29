@@ -487,7 +487,7 @@
 
     <div class="toast-container" id="toastContainer"></div>
 
-    <!-- Заставка с правилами (10 пунктов, обязательная прокрутка) -->
+    <!-- Заставка с правилами -->
     <div id="welcome-overlay">
         <div id="welcome-modal">
             <div class="modal-header">
@@ -798,16 +798,21 @@
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: currentFacingMode },
-                    audio: true
+                    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } // Улучшенный звук
                 });
                 localStream = stream;
                 localVideo.srcObject = localStream;
                 localVideo.style.display = 'block';
                 localStatus.style.display = 'none';
             } catch (err) {
+                // ИСПРАВЛЕНИЕ ДЛЯ ПК БЕЗ КАМЕРЫ (Звук будет работать 100%)
                 try {
-                    const audioStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+                    const audioStream = await navigator.mediaDevices.getUserMedia({ 
+                        video: false, 
+                        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
+                    });
                     localStream = audioStream;
+                    localVideo.srcObject = localStream; 
                     localStatus.innerText = "Камера недоступна. Работает только микрофон.";
                 } catch (errAudio) {
                     localStatus.innerText = "Доступ к камере и микрофону отклонен.";
@@ -877,12 +882,24 @@
             peerConnection.ontrack = event => {
                 if (event.streams && event.streams[0]) {
                     stopTVNoise();
-                    remoteVideo.srcObject = event.streams[0];
+                    
+                    if (remoteVideo.srcObject !== event.streams[0]) {
+                        remoteVideo.srcObject = event.streams[0];
+                    }
+                    
                     remoteVideo.style.display = 'block';
                     remoteStatus.style.display = 'none';
+
+                    // ГЛАВНОЕ ИСПРАВЛЕНИЕ: Форсируем включение звука для собеседника
+                    remoteVideo.muted = false;
+                    remoteVideo.volume = 1.0;
+
                     const playPromise = remoteVideo.play();
                     if (playPromise !== undefined) {
-                        playPromise.catch(() => { remoteVideo.muted = true; remoteVideo.play(); });
+                        playPromise.catch((e) => { 
+                            console.warn("Autoplay block:", e);
+                            // Мы убрали отсюда .muted = true, из-за которого пропадал звук
+                        });
                     }
                 }
             };
