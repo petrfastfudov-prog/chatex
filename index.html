@@ -220,7 +220,6 @@
         /* Основной контейнер */
         .main-wrapper {
             flex: 1;
-            display: flex;
             gap: 20px;
             padding: 20px;
             max-width: 1600px;
@@ -308,6 +307,37 @@
 
         .network-warning span { font-size: 1.1rem; font-weight: bold; margin-bottom: 6px; }
         .network-warning small { color: var(--text-muted); font-size: 0.85rem; }
+
+        /* Стильный оверлей блюра и предупреждения 18+ */
+        .nsfw-blur-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(15, 23, 42, 0.4);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 5;
+            color: #fff;
+            text-align: center;
+            padding: 20px;
+        }
+        .nsfw-blur-overlay .badge-18 {
+            background: var(--accent-red);
+            color: #fff;
+            font-size: 1.1rem;
+            font-weight: bold;
+            padding: 6px 16px;
+            border-radius: 30px;
+            margin-bottom: 10px;
+            box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);
+        }
+        .nsfw-blur-overlay p {
+            font-size: 0.95rem;
+            color: #cbd5e1;
+        }
 
         .control-buttons {
             display: flex;
@@ -476,7 +506,7 @@
                 <h3>Правила адекватного общения и модерации</h3>
                 <p><b>1. Формат платформы:</b> Chatex создавался для интересного, живого и адекватного общения. Любые проявления вирта, похабщины и неадекватности здесь запрещены.</p>
                 <p><b>2. Строгий возрастное ограничение (18+):</b> Платформа предназначена только для совершеннолетних. Несовершеннолетние обязаны немедленно покинуть ресурс.</p>
-                <p><b>3. Автоматическая нейро-модерация (NSFW Blackout):</b> В систему встроен фоновый фильтр. При попытке обнажения или демонстрации гениталий трансляция собеседника мгновенно блокируется черным экраном.</p>
+                <p><b>3. Автоматическая нейро-модерация (18+ Blur):</b> В систему встроен фоновый фильтр. При попытке демонстрации запрещенного или откровенного контента видео собеседника мгновенно размывается защитным фильтром.</p>
                 <p><b>4. Запрет на ненадлежащий контент:</b> Строго запрещены попытки трансляции сексуального, экстремистского или шок-контента. Нарушители блокируются навсегда по IP.</p>
                 <p><b>5. Архитектура P2P:</b> Связь работает напрямую между устройствами (WebRTC). Разговоры не записываются и не сохраняются на центральных серверах.</p>
                 <p><b>6. Безопасность и анонимность:</b> Не передавайте личные данные, номер телефона или адрес проживания незнакомым людям в первых минутах разговора.</p>
@@ -513,6 +543,11 @@
                 <div class="video-window">
                     <canvas class="tv-noise-canvas" id="tvNoiseCanvas"></canvas>
                     <video id="remoteVideo" autoplay playsinline webkit-playsinline></video>
+                    <!-- Красивый оверлей блюра вместо черного экрана -->
+                    <div class="nsfw-blur-overlay" id="nsfwBlurOverlay">
+                        <div class="badge-18">18+ ВНИМАНИЕ</div>
+                        <p>Контент скрыт системой защиты</p>
+                    </div>
                     <div class="video-status" id="remoteStatus" style="display: none;">Поиск не запущен. Нажмите «НАЧАТЬ».</div>
                     <div class="network-warning" id="networkWarning">
                         <span>⚠️ Плохое соединение</span>
@@ -645,6 +680,7 @@
         const localStatus = document.getElementById('localStatus');
         const remoteStatus = document.getElementById('remoteStatus');
         const networkWarning = document.getElementById('networkWarning');
+        const nsfwBlurOverlay = document.getElementById('nsfwBlurOverlay');
         const muteBtn = document.getElementById('muteBtn');
         const flipBtn = document.getElementById('flipBtn');
         const nextBtn = document.getElementById('nextBtn');
@@ -661,10 +697,11 @@
         let currentFacingMode = 'user';
         let mediaInitialized = false;
 
-        // --- УМНЫЙ ЗАЩИЩЕННЫЙ ФИЛЬТР (БЕЗ УВЕДОМЛЕНИЙ И ЗЕРКАЛА) ---
+        // --- УЛУЧШЕННЫЙ ТОЧНЫЙ NSFW ФИЛЬТР С БЛЮРОМ (ИЗБЕГАЕМ ЛОЖНЫХ СРАБАТЫВАНИЙ НА ВОЗДУХ) ---
         let nsfwModel = null;
         let nsfwInterval = null;
-        let isBlackoutActive = false;
+        let isBlurActive = false;
+        let consecutiveViolations = 0; // Требуем подтверждения в несколько кадров, чтобы исключить ложные срабатывания
 
         const offCanvas = document.createElement('canvas');
         offCanvas.width = 224;
@@ -680,66 +717,40 @@
         }
         initNSFWModel();
 
-        function calculateTargetSkinRatio(ctx, width, height) {
-            const imgData = ctx.getImageData(0, 0, width, height);
-            const data = imgData.data;
-            let centerSkinPixels = 0;
-            let totalCenterPixels = 0;
-
-            const startY = Math.floor(height * 0.25); 
-
-            for (let y = startY; y < height; y += 4) {
-                for (let x = Math.floor(width * 0.15); x < Math.floor(width * 0.85); x += 4) {
-                    const i = (y * width + x) * 4;
-                    const r = data[i];
-                    const g = data[i + 1];
-                    const b = data[i + 2];
-
-                    const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
-                    const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
-
-                    if (cb >= 77 && cb <= 127 && cr >= 133 && cr <= 173) {
-                        centerSkinPixels++;
-                    }
-                    totalCenterPixels++;
-                }
-            }
-            return centerSkinPixels / totalCenterPixels;
-        }
-
         function startNSFWMonitoring() {
             if (nsfwInterval) clearInterval(nsfwInterval);
+            consecutiveViolations = 0;
             
             nsfwInterval = setInterval(async () => {
-                if (!remoteVideo || remoteVideo.paused || remoteVideo.readyState < 2) return;
+                if (!remoteVideo || remoteVideo.paused || remoteVideo.readyState < 2 || !nsfwModel) return;
                 
                 try {
                     offCtx.drawImage(remoteVideo, 0, 0, 224, 224);
-                    const skinRatio = calculateTargetSkinRatio(offCtx, 224, 224);
+                    
+                    const predictions = await nsfwModel.classify(offCanvas);
+                    const porn = predictions.find(p => p.className === 'Porn')?.probability || 0;
+                    const sexy = predictions.find(p => p.className === 'Sexy')?.probability || 0;
+                    const hentai = predictions.find(p => p.className === 'Hentai')?.probability || 0;
 
-                    let porn = 0, sexy = 0, hentai = 0;
-                    if (nsfwModel) {
-                        const predictions = await nsfwModel.classify(offCanvas);
-                        porn = predictions.find(p => p.className === 'Porn')?.probability || 0;
-                        sexy = predictions.find(p => p.className === 'Sexy')?.probability || 0;
-                        hentai = predictions.find(p => p.className === 'Hentai')?.probability || 0;
-                    }
-
-                    const violationDetected = (skinRatio > 0.42 || porn > 0.25 || sexy > 0.45 || hentai > 0.30);
+                    // Порог настроен строго на контент, исключая ложные срабатывания на фон/воздух
+                    const violationDetected = (porn > 0.55 || hentai > 0.50 || sexy > 0.75);
 
                     if (violationDetected) {
-                        if (!isBlackoutActive) {
-                            isBlackoutActive = true;
-                            remoteVideo.style.display = 'none';
+                        consecutiveViolations++;
+                        // Включаем блюр только если нарушение зафиксировано подряд несколько раз (убирает ложные дергания)
+                        if (consecutiveViolations >= 2 && !isBlurActive) {
+                            isBlurActive = true;
+                            nsfwBlurOverlay.style.display = 'flex';
                         }
                     } else {
-                        if (isBlackoutActive) {
-                            isBlackoutActive = false;
-                            remoteVideo.style.display = 'block';
+                        consecutiveViolations = 0;
+                        if (isBlurActive) {
+                            isBlurActive = false;
+                            nsfwBlurOverlay.style.display = 'none';
                         }
                     }
                 } catch (e) {}
-            }, 800); 
+            }, 1000); // Проверка раз в секунду для стабильности
         }
 
         function stopNSFWMonitoring() {
@@ -747,9 +758,12 @@
                 clearInterval(nsfwInterval);
                 nsfwInterval = null;
             }
-            isBlackoutActive = false;
+            isBlurActive = false;
+            consecutiveViolations = 0;
+            nsfwBlurOverlay.style.display = 'none';
         }
 
+        // --- РАСШИРЕННЫЕ TURN/STUN СЕРВЕРЫ ДЛЯ СВЯЗИ ЧЕРЕЗ МОБИЛЬНЫЕ СЕТИ И LTE/5G ---
         const configuration = { 
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
@@ -759,7 +773,8 @@
                 { urls: 'turn:openrelay.metered.ca:80', username: 'openrelay', credential: 'openrelay' },
                 { urls: 'turn:openrelay.metered.ca:443', username: 'openrelay', credential: 'openrelay' },
                 { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelay', credential: 'openrelay' }
-            ] 
+            ],
+            iceCandidatePoolSize: 10
         };
 
         function connectWebSocket() {
@@ -849,6 +864,7 @@
                 localVideo.srcObject = localStream;
                 localVideo.style.display = 'block';
                 localStatus.style.display = 'none';
+                mediaInitialized = true;
             } catch (err) {
                 try {
                     const audioStream = await navigator.mediaDevices.getUserMedia({ 
@@ -859,133 +875,59 @@
                     if (isMuted) {
                         localStream.getAudioTracks().forEach(t => t.enabled = false);
                     }
-                    localVideo.srcObject = localStream; 
-                    localStatus.innerText = "Камера недоступна. Работает только микрофон.";
-                } catch (errAudio) {
-                    localStatus.innerText = "Доступ к камере и микрофону отклонен.";
+                    localVideo.srcObject = localStream;
+                    localStatus.innerText = "Камера недоступна (только аудио)";
+                    localStatus.style.display = 'block';
+                    mediaInitialized = true;
+                } catch (e) {
+                    localStatus.innerText = "Ошибка доступа к камере и микрофону";
+                    addSystemMsg("Не удалось получить доступ к медиа-устройствам.", "error");
                 }
             }
         }
 
-        muteBtn.addEventListener('click', () => {
-            if (localStream && localStream.getAudioTracks().length > 0) {
-                isMuted = !isMuted;
-                
-                localStream.getAudioTracks().forEach(track => { 
-                    track.enabled = !isMuted; 
-                });
-
-                if (peerConnection) {
-                    peerConnection.getSenders().forEach(sender => {
-                        if (sender.track && sender.track.kind === 'audio') {
-                            sender.track.enabled = !isMuted;
-                        }
-                    });
-                }
-
-                muteBtn.innerText = isMuted ? '🔇' : '🎙️';
-                muteBtn.style.background = isMuted ? 'rgba(239, 68, 68, 0.25)' : 'rgba(255, 255, 255, 0.05)';
-            }
-        });
-
-        flipBtn.addEventListener('click', async () => {
-            if (!localStream) return;
-            const oldVideoTrack = localStream.getVideoTracks()[0];
-            if (!oldVideoTrack) return;
-
-            currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
-            try {
-                oldVideoTrack.stop();
-                let newStream;
-                try {
-                    newStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: currentFacingMode } }, audio: false });
-                } catch (e) {
-                    newStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode }, audio: false });
-                }
-
-                const newVideoTrack = newStream.getVideoTracks()[0];
-                localStream.removeTrack(oldVideoTrack);
-                localStream.addTrack(newVideoTrack);
-                localVideo.srcObject = localStream;
-
-                if (peerConnection) {
-                    const senders = peerConnection.getSenders();
-                    const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-                    if (videoSender) await videoSender.replaceTrack(newVideoTrack);
-                }
-            } catch (err) {}
-        });
-
         function createPeerConnection() {
+            if (peerConnection) return;
             peerConnection = new RTCPeerConnection(configuration);
 
             if (localStream) {
                 localStream.getTracks().forEach(track => {
-                    if (track.kind === 'audio') {
-                        track.enabled = !isMuted;
-                    }
                     peerConnection.addTrack(track, localStream);
                 });
-
-                if (localStream.getVideoTracks().length === 0) {
-                    peerConnection.addTransceiver('video', { direction: 'recvonly' });
-                }
-                if (localStream.getAudioTracks().length === 0) {
-                    peerConnection.addTransceiver('audio', { direction: 'recvonly' });
-                }
-            } else {
-                peerConnection.addTransceiver('video', { direction: 'recvonly' });
-                peerConnection.addTransceiver('audio', { direction: 'recvonly' });
             }
 
-            peerConnection.oniceconnectionstatechange = () => {
-                const state = peerConnection.iceConnectionState;
-                if (state === 'connected' || state === 'completed') {
-                    networkWarning.style.display = 'none';
-                    stopTVNoise();
-                    startNSFWMonitoring(); 
-                } else if (state === 'disconnected') {
-                    networkWarning.style.display = 'flex';
-                } else if (state === 'failed') {
-                    networkWarning.style.display = 'none';
-                    cleanupPeerConnection();
-                }
-            };
-
-            peerConnection.ontrack = event => {
-                stopTVNoise();
-                
-                let stream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
-                
-                remoteVideo.srcObject = stream;
-                if (!isBlackoutActive) {
+            peerConnection.ontrack = (event) => {
+                if (event.streams && event.streams[0]) {
+                    remoteVideo.srcObject = event.streams[0];
                     remoteVideo.style.display = 'block';
+                    stopTVNoise();
                     remoteStatus.style.display = 'none';
-                }
-
-                remoteVideo.muted = false;
-                remoteVideo.volume = 1.0;
-
-                const playPromise = remoteVideo.play();
-                if (playPromise !== undefined) {
-                    playPromise.catch((e) => {});
+                    startNSFWMonitoring();
                 }
             };
 
-            peerConnection.onicecandidate = event => {
+            peerConnection.onicecandidate = (event) => {
                 if (event.candidate && ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ type: 'candidate', candidate: event.candidate }));
+                }
+            };
+
+            peerConnection.onconnectionstatechange = () => {
+                if (peerConnection) {
+                    if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
+                        networkWarning.style.display = 'flex';
+                    } else if (peerConnection.connectionState === 'connected') {
+                        networkWarning.style.display = 'none';
+                    }
                 }
             };
         }
 
         async function processIceQueue() {
-            while (iceCandidatesQueue.length > 0) {
+            while (iceCandidatesQueue.length > 0 && peerConnection && peerConnection.remoteDescription) {
                 const candidate = iceCandidatesQueue.shift();
                 try {
-                    if (peerConnection && peerConnection.remoteDescription) {
-                        await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-                    }
+                    await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
                 } catch (e) {}
             }
         }
@@ -993,73 +935,96 @@
         function cleanupPeerConnection() {
             stopNSFWMonitoring();
             if (peerConnection) {
-                peerConnection.onicecandidate = null;
                 peerConnection.ontrack = null;
+                peerConnection.onicecandidate = null;
+                peerConnection.onconnectionstatechange = null;
                 peerConnection.close();
                 peerConnection = null;
             }
-            iceCandidatesQueue = [];
             remoteVideo.srcObject = null;
             remoteVideo.style.display = 'none';
             networkWarning.style.display = 'none';
+            nsfwBlurOverlay.style.display = 'none';
+            iceCandidatesQueue = [];
+        }
+
+        function addSystemMsg(text, type = 'system') {
+            const msg = document.createElement('div');
+            msg.className = type === 'error' ? 'msg-error' : 'msg-system';
+            msg.innerText = text;
+            chatBody.appendChild(msg);
+            chatBody.scrollTop = chatBody.scrollHeight;
         }
 
         nextBtn.addEventListener('click', async () => {
-            if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
             if (!mediaInitialized) {
-                localStatus.innerText = "Запрос доступа к камере...";
                 await initMedia();
-                mediaInitialized = true;
-                nextBtn.innerText = "ДАЛЕЕ";
             }
-
-            cleanupPeerConnection();
             startTVNoise();
-            remoteStatus.innerText = "Ищем свободного собеседника...";
+            remoteStatus.innerText = "Поиск собеседника...";
             remoteStatus.style.display = 'block';
+            cleanupPeerConnection();
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'find_peer' }));
+            }
             addSystemMsg("Поиск нового собеседника...");
-            ws.send(JSON.stringify({ type: 'find_peer' }));
         });
 
         stopBtn.addEventListener('click', () => {
             cleanupPeerConnection();
-            stopTVNoise();
-            remoteStatus.innerText = "Поиск остановлен. Нажмите «ДАЛЕЕ» для продолжения.";
-            remoteStatus.style.display = 'block';
-            addSystemMsg("Вы остановили поиск.");
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'stop_search' }));
             }
+            startTVNoise();
+            remoteStatus.innerText = "Поиск остановлен. Нажмите «НАЧАТЬ».";
+            remoteStatus.style.display = 'block';
+            addSystemMsg("Вы остановили общение.");
         });
 
-        function sendMessage() {
-            const text = chatInput.value.trim();
-            if (text !== '') {
-                const msg = document.createElement('div');
-                msg.className = 'msg-text';
-                msg.innerHTML = `<strong>Вы:</strong> ${text}`;
-                chatBody.appendChild(msg);
-                chatInput.value = '';
-                chatBody.scrollTop = chatBody.scrollHeight;
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ type: 'chat_message', text: text }));
+        muteBtn.addEventListener('click', () => {
+            isMuted = !isMuted;
+            if (localStream) {
+                localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
+            }
+            muteBtn.innerText = isMuted ? '🔇' : '🎙️';
+            muteBtn.style.background = isMuted ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.05)';
+        });
+
+        flipBtn.addEventListener('click', async () => {
+            currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+            if (localStream) {
+                localStream.getTracks().forEach(t => t.stop());
+            }
+            await initMedia();
+            if (peerConnection && localStream) {
+                const senders = peerConnection.getSenders();
+                const videoTrack = localStream.getVideoTracks()[0];
+                const sender = senders.find(s => s.track && s.track.kind === 'video');
+                if (sender && videoTrack) {
+                    sender.replaceTrack(videoTrack);
                 }
             }
-        }
-
-        sendBtn.addEventListener('click', sendMessage);
-        chatInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
         });
 
-        function addSystemMsg(text, className = 'msg-system') {
-            const sys = document.createElement('div');
-            sys.className = className;
-            sys.innerText = text;
-            chatBody.appendChild(sys);
+        function sendChatMessage() {
+            const text = chatInput.value.trim();
+            if (!text) return;
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'chat_message', text: text }));
+            }
+            const msg = document.createElement('div');
+            msg.className = 'msg-text';
+            msg.innerHTML = `<strong>Вы:</strong> ${text}`;
+            chatBody.appendChild(msg);
             chatBody.scrollTop = chatBody.scrollHeight;
+            chatInput.value = '';
         }
+
+        sendBtn.addEventListener('click', sendChatMessage);
+        chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') sendChatMessage();
+        });
     </script>
 </body>
 </html>
