@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Chatex — анонимный видеочат рулетка без регистрации</title>
     
-    <!-- TensorFlow.js и NSFWJS для фильтрации контента -->
+    <!-- TensorFlow.js и NSFWJS -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/nsfwjs@2.4.2/dist/nsfwjs.min.js"></script>
 
@@ -20,7 +20,6 @@
             --accent-blue: #3b82f6;
             --accent-green: #22c55e;
             --accent-red: #ef4444;
-            --toast-bg: #1e293b;
         }
 
         * {
@@ -112,19 +111,9 @@
             -webkit-overflow-scrolling: touch;
         }
 
-        #rules-box h3 {
-            color: var(--text-primary);
-            margin-bottom: 10px;
-            font-size: 1.05rem;
-        }
-
-        #rules-box p {
-            margin-bottom: 12px;
-        }
-
-        #rules-box b {
-            color: #f8fafc;
-        }
+        #rules-box h3 { color: var(--text-primary); margin-bottom: 10px; font-size: 1.05rem; }
+        #rules-box p { margin-bottom: 12px; }
+        #rules-box b { color: #f8fafc; }
 
         #rules-box::-webkit-scrollbar { width: 6px; }
         #rules-box::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 10px; }
@@ -141,18 +130,8 @@
             cursor: pointer;
         }
 
-        .checkbox-group input {
-            width: 20px;
-            height: 20px;
-            cursor: pointer;
-        }
-
-        .checkbox-group label {
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 0.95rem;
-            user-select: none;
-        }
+        .checkbox-group input { width: 20px; height: 20px; cursor: pointer; }
+        .checkbox-group label { cursor: pointer; font-weight: bold; font-size: 0.95rem; user-select: none; }
 
         #accept-btn {
             background: var(--accent-green);
@@ -166,17 +145,8 @@
             transition: all 0.3s;
         }
 
-        #accept-btn:disabled {
-            background: #1e293b;
-            color: #475569;
-            cursor: not-allowed;
-            box-shadow: none;
-        }
-
-        #accept-btn:not(:disabled):hover {
-            background: #16a34a;
-            box-shadow: 0 4px 14px rgba(34, 197, 94, 0.3);
-        }
+        #accept-btn:disabled { background: #1e293b; color: #475569; cursor: not-allowed; box-shadow: none; }
+        #accept-btn:not(:disabled):hover { background: #16a34a; box-shadow: 0 4px 14px rgba(34, 197, 94, 0.3); }
 
         /* Шапка */
         header {
@@ -216,7 +186,6 @@
             box-shadow: 0 0 12px rgba(59, 130, 246, 0.5);
         }
 
-        /* Пасхалка */
         #creator-tag {
             font-size: 0.8rem;
             color: #38bdf8;
@@ -322,7 +291,7 @@
         .network-warning span { font-size: 1.1rem; font-weight: bold; margin-bottom: 6px; }
         .network-warning small { color: var(--text-muted); font-size: 0.85rem; }
 
-        /* НАДЕЖНЫЙ ЧЕРНЫЙ ЭКРАН (ЗАМЕНА БЛЮРУ) */
+        /* ЖЕСТКИЙ ЧЕРНЫЙ ЭКРАН */
         .nsfw-blur-overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -346,10 +315,7 @@
             margin-bottom: 10px;
             box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);
         }
-        .nsfw-blur-overlay p {
-            font-size: 0.95rem;
-            color: #cbd5e1;
-        }
+        .nsfw-blur-overlay p { font-size: 0.95rem; color: #cbd5e1; }
 
         .control-buttons {
             display: flex;
@@ -598,6 +564,9 @@
         </div>
     </div>
 
+    <!-- Скрытый канвас для надежной обработки кадров нейросетью -->
+    <canvas id="analysisCanvas" style="display:none;"></canvas>
+
     <script>
         // Пасхалка: 5 кликов показать, еще 5 - скрыть
         const brandTitle = document.getElementById('brandTitle');
@@ -716,6 +685,9 @@
         const chatBody = document.getElementById('chatBody');
         const chatInput = document.getElementById('chatInput');
         const sendBtn = document.getElementById('sendBtn');
+        
+        const analysisCanvas = document.getElementById('analysisCanvas');
+        const analysisCtx = analysisCanvas.getContext('2d');
 
         let localStream = null;
         let peerConnection = null;
@@ -725,37 +697,30 @@
         let currentFacingMode = 'user';
         let mediaInitialized = false;
 
-        // --- НАДЕЖНЫЙ NSFW ФИЛЬТР (С ЧЕРНЫМ ЭКРАНОМ) ---
+        // --- УЛЬТРАНАДЕЖНЫЙ NSFW ФИЛЬТР ЧЕРЕЗ КАНВАС ---
         let nsfwModel = null;
         let nsfwInterval = null;
         let isBlurActive = false;
-        let consecutiveViolations = 0;
-        let cleanFrames = 0;
         let isClassifying = false;
 
         async function initNSFWModel() {
             try {
                 if (typeof tf !== 'undefined') {
+                    await tf.setBackend('cpu'); // Принудительно CPU во избежание падений WebGL на старых девайсах
                     await tf.ready();
                 }
                 if (window.nsfwjs) {
                     nsfwModel = await nsfwjs.load();
                 }
             } catch (e) {
-                try {
-                    if (typeof tf !== 'undefined') {
-                        await tf.setBackend('cpu');
-                        nsfwModel = await nsfwjs.load();
-                    }
-                } catch (err) {}
+                console.error("NSFW load error:", e);
             }
         }
         initNSFWModel();
 
         function startNSFWMonitoring() {
             if (nsfwInterval) clearInterval(nsfwInterval);
-            consecutiveViolations = 0;
-            cleanFrames = 0;
+            isBlurActive = false;
             isClassifying = false;
             
             nsfwInterval = setInterval(async () => {
@@ -765,7 +730,14 @@
                 
                 isClassifying = true;
                 try {
-                    const predictions = await nsfwModel.classify(remoteVideo);
+                    // Конвертируем текущий кадр видео в канвас, чтобы модель не зависала на HTMLVideoElement
+                    if (analysisCanvas.width !== 224 || analysisCanvas.height !== 224) {
+                        analysisCanvas.width = 224;
+                        analysisCanvas.height = 224;
+                    }
+                    analysisCtx.drawImage(remoteVideo, 0, 0, 224, 224);
+
+                    const predictions = await nsfwModel.classify(analysisCanvas);
                     
                     let porn = 0, sexy = 0, hentai = 0;
                     for (let i = 0; i < predictions.length; i++) {
@@ -774,21 +746,16 @@
                         if (predictions[i].className === 'Hentai') hentai = predictions[i].probability;
                     }
 
-                    // Пороги срабатывания для обнаженного торса / откровенного контента
-                    const violationDetected = (porn > 0.30 || sexy > 0.45 || hentai > 0.35);
+                    // Четкие пороги: срабатывает даже на обнаженный торс / эротику
+                    const violationDetected = (porn > 0.15 || sexy > 0.25 || hentai > 0.15);
 
                     if (violationDetected) {
-                        consecutiveViolations++;
-                        cleanFrames = 0;
-                        
-                        if (consecutiveViolations >= 2 && !isBlurActive) {
+                        if (!isBlurActive) {
                             isBlurActive = true;
                             nsfwBlurOverlay.style.display = 'flex';
                         }
                     } else {
-                        cleanFrames++;
-                        if (cleanFrames >= 4 && isBlurActive) {
-                            consecutiveViolations = 0;
+                        if (isBlurActive) {
                             isBlurActive = false;
                             nsfwBlurOverlay.style.display = 'none';
                         }
@@ -797,7 +764,7 @@
                 } finally {
                     isClassifying = false;
                 }
-            }, 500);
+            }, 300); // Проверка каждые 300 мс для максимальной скорости реакции
         }
 
         function stopNSFWMonitoring() {
@@ -806,8 +773,6 @@
                 nsfwInterval = null;
             }
             isBlurActive = false;
-            consecutiveViolations = 0;
-            cleanFrames = 0;
             isClassifying = false;
             nsfwBlurOverlay.style.display = 'none';
         }
