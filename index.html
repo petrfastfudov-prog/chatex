@@ -305,7 +305,6 @@
             position: absolute;
             top: 0; left: 0;
             z-index: 1;
-            /* СТРОГИЙ БЛОК НА ЗЕРКАЛИРОВАНИЕ */
             transform: none !important;
             -webkit-transform: none !important;
         }
@@ -711,9 +710,15 @@
         let currentFacingMode = 'user';
         let mediaInitialized = false;
 
-        // --- ИНИЦИАЛИЗАЦИЯ И ЛОГИКА NSFW ФИЛЬТРА ---
+        // --- ДВУХУРОВНЕВАЯ СИСТЕМА ДЕТЕКЦИИ ОБНАЖЕНИЯИ И NSFW ---
         let nsfwModel = null;
         let nsfwInterval = null;
+
+        // Скрытый холст для экспресс-анализа кадров
+        const offCanvas = document.createElement('canvas');
+        offCanvas.width = 224;
+        offCanvas.height = 224;
+        const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
 
         async function initNSFWModel() {
             try {
@@ -727,28 +732,63 @@
         }
         initNSFWModel();
 
+        // Алгоритм поиска кожи в цветовом пространстве YCbCr (работает со всеми оттенками)
+        function calculateSkinRatio(ctx, width, height) {
+            const imgData = ctx.getImageData(0, 0, width, height);
+            const data = imgData.data;
+            let skinPixels = 0;
+            let totalPixels = 0;
+
+            for (let i = 0; i < data.length; i += 16) { // шаг 4 пикселя для высокого FPS
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+
+                // Формула YCbCr
+                const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
+                const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
+
+                if (cb >= 77 && cb <= 127 && cr >= 133 && cr <= 173) {
+                    skinPixels++;
+                }
+                totalPixels++;
+            }
+            return skinPixels / totalPixels;
+        }
+
         function startNSFWMonitoring() {
             if (nsfwInterval) clearInterval(nsfwInterval);
             
             nsfwInterval = setInterval(async () => {
-                if (!nsfwModel || !remoteVideo || remoteVideo.style.display === 'none' || remoteVideo.paused || remoteVideo.readyState < 2) return;
+                if (!remoteVideo || remoteVideo.style.display === 'none' || remoteVideo.paused || remoteVideo.readyState < 2) return;
                 
                 try {
-                    const predictions = await nsfwModel.classify(remoteVideo);
-                    const porn = predictions.find(p => p.className === 'Porn')?.probability || 0;
-                    const sexy = predictions.find(p => p.className === 'Sexy')?.probability || 0;
-                    const hentai = predictions.find(p => p.className === 'Hentai')?.probability || 0;
-                    const neutral = predictions.find(p => p.className === 'Neutral')?.probability || 0;
+                    // 1. Отрисовываем кадр на скрытом Canvas
+                    offCtx.drawImage(remoteVideo, 0, 0, 224, 224);
 
-                    console.log(`NSFW Скан: Porn=${(porn*100).toFixed(1)}%, Sexy=${(sexy*100).toFixed(1)}%, Neutral=${(neutral*100).toFixed(1)}%`);
+                    // 2. Считаем процент площади голой кожи
+                    const skinRatio = calculateSkinRatio(offCtx, 224, 224);
 
-                    if (porn > 0.25 || sexy > 0.40 || hentai > 0.30) {
+                    // 3. Сканируем нейросетью NSFWJS
+                    let porn = 0, sexy = 0, hentai = 0;
+                    if (nsfwModel) {
+                        const predictions = await nsfwModel.classify(offCanvas);
+                        porn = predictions.find(p => p.className === 'Porn')?.probability || 0;
+                        sexy = predictions.find(p => p.className === 'Sexy')?.probability || 0;
+                        hentai = predictions.find(p => p.className === 'Hentai')?.probability || 0;
+                    }
+
+                    console.log(`Скан: Кожа=${(skinRatio*100).toFixed(1)}%, Porn=${(porn*100).toFixed(1)}%, Sexy=${(sexy*100).toFixed(1)}%`);
+
+                    // КРИТЕРИИ БЛОКИРОВКИ:
+                    // Если открытой кожи на экране >28% (снятая футболка/торс) ИЛИ NSFWJS нашел откровенный контент
+                    if (skinRatio > 0.28 || porn > 0.15 || sexy > 0.30 || hentai > 0.20) {
                         triggerBlackout();
                     }
                 } catch (e) {
-                    console.error("Ошибка сканирования NSFW:", e);
+                    console.error("Ошибка сканирования:", e);
                 }
-            }, 1000); 
+            }, 800); 
         }
 
         function stopNSFWMonitoring() {
@@ -864,7 +904,6 @@
                 });
                 localStream = stream;
                 
-                // Синхронизируем текущее состояние кнопки mute с полученным аудиотреком
                 if (isMuted) {
                     localStream.getAudioTracks().forEach(t => t.enabled = false);
                 }
@@ -890,17 +929,14 @@
             }
         }
 
-        // --- ИСПРАВЛЕННАЯ КНОПКА МЬЮТА ДЛЯ МОБИЛЬНЫХ ---
         muteBtn.addEventListener('click', () => {
             if (localStream && localStream.getAudioTracks().length > 0) {
                 isMuted = !isMuted;
                 
-                // 1. Отключаем трек в локальном медиапотоке
                 localStream.getAudioTracks().forEach(track => { 
                     track.enabled = !isMuted; 
                 });
 
-                // 2. Напрямую отключаем отправку звукового трека через WebRTC (Критично для Safari/iOS)
                 if (peerConnection) {
                     peerConnection.getSenders().forEach(sender => {
                         if (sender.track && sender.track.kind === 'audio') {
@@ -947,7 +983,6 @@
 
             if (localStream) {
                 localStream.getTracks().forEach(track => {
-                    // Соблюдаем статус мьюта микрофона при добавлении треков в WebRTC
                     if (track.kind === 'audio') {
                         track.enabled = !isMuted;
                     }
