@@ -216,7 +216,7 @@
             box-shadow: 0 0 12px rgba(59, 130, 246, 0.5);
         }
 
-        /* Стиль для пасхалки */
+        /* Пасхалка */
         #creator-tag {
             font-size: 0.8rem;
             color: #38bdf8;
@@ -322,7 +322,7 @@
         .network-warning span { font-size: 1.1rem; font-weight: bold; margin-bottom: 6px; }
         .network-warning small { color: var(--text-muted); font-size: 0.85rem; }
 
-        /* Стильный оверлей блюра */
+        /* Оверлей блюра */
         .nsfw-blur-overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -601,7 +601,7 @@
     </div>
 
     <script>
-        // --- ОБНОВЛЕННАЯ ПАСХАЛКА: 5 КЛИКОВ ПОКАЗАТЬ, ЕЩЕ 5 - СКРЫТЬ ---
+        // Пасхалка: 5 кликов показать, еще 5 - скрыть
         const brandTitle = document.getElementById('brandTitle');
         const creatorTag = document.getElementById('creator-tag');
         let clickCount = 0;
@@ -612,7 +612,7 @@
             if (clickCount >= 5) {
                 isCreatorTagVisible = !isCreatorTagVisible;
                 creatorTag.style.display = isCreatorTagVisible ? 'inline-block' : 'none';
-                clickCount = 0; // Сбрасываем счетчик после переключения
+                clickCount = 0;
             }
         });
 
@@ -727,7 +727,7 @@
         let currentFacingMode = 'user';
         let mediaInitialized = false;
 
-        // --- ЖЕСТКИЙ NSFW ФИЛЬТР ---
+        // --- УЛУЧШЕННЫЙ И НАДЕЖНЫЙ NSFW ФИЛЬТР (ПК + МОБИЛЬНЫЕ) ---
         let nsfwModel = null;
         let nsfwInterval = null;
         let isBlurActive = false;
@@ -735,17 +735,27 @@
         let cleanFrames = 0;
         let isClassifying = false;
 
-        const offCanvas = document.createElement('canvas');
-        offCanvas.width = 224;
-        offCanvas.height = 224;
-        const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
-
         async function initNSFWModel() {
             try {
+                if (typeof tf !== 'undefined') {
+                    await tf.ready();
+                }
                 if (window.nsfwjs) {
                     nsfwModel = await nsfwjs.load();
+                    console.log("NSFWJS фильтр успешно загружен");
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.warn("Ошибка WebGL для NSFWJS, переключение на CPU...", e);
+                try {
+                    if (typeof tf !== 'undefined') {
+                        await tf.setBackend('cpu');
+                        nsfwModel = await nsfwjs.load();
+                        console.log("NSFWJS загружен в CPU режиме");
+                    }
+                } catch (err) {
+                    console.error("Не удалось загрузить нейросеть фильтра:", err);
+                }
+            }
         }
         initNSFWModel();
 
@@ -756,41 +766,50 @@
             isClassifying = false;
             
             nsfwInterval = setInterval(async () => {
-                if (!remoteVideo || remoteVideo.paused || remoteVideo.readyState < 2 || !nsfwModel || isClassifying) return;
+                // Проверяем статус видеопотока и нейросети
+                if (!remoteVideo || remoteVideo.paused || remoteVideo.ended || remoteVideo.readyState < 2 || !nsfwModel || isClassifying) {
+                    return;
+                }
                 
                 isClassifying = true;
                 try {
-                    offCtx.drawImage(remoteVideo, 0, 0, 224, 224);
+                    // Классифицируем прямо элемент <video>, сохраняя пропорции кадра
+                    const predictions = await nsfwModel.classify(remoteVideo);
                     
-                    const predictions = await nsfwModel.classify(offCanvas);
-                    const porn = predictions.find(p => p.className === 'Porn')?.probability || 0;
-                    const sexy = predictions.find(p => p.className === 'Sexy')?.probability || 0;
-                    const hentai = predictions.find(p => p.className === 'Hentai')?.probability || 0;
+                    let porn = 0, sexy = 0, hentai = 0;
+                    for (let i = 0; i < predictions.length; i++) {
+                        if (predictions[i].className === 'Porn') porn = predictions[i].probability;
+                        if (predictions[i].className === 'Sexy') sexy = predictions[i].probability;
+                        if (predictions[i].className === 'Hentai') hentai = predictions[i].probability;
+                    }
 
-                    // Пороги срабатывания: мгновенно на открытый контент или голый торс
-                    const violationDetected = (porn > 0.15 || hentai > 0.20 || sexy > 0.20);
+                    // Оптимальные пороги: обнаженный торс дает высокое значение Sexy/Porn
+                    const violationDetected = (porn > 0.30 || sexy > 0.45 || hentai > 0.35);
 
                     if (violationDetected) {
                         consecutiveViolations++;
                         cleanFrames = 0;
                         
-                        if (consecutiveViolations >= 1 && !isBlurActive) {
+                        // Требуется 2 кадра подряд с повышением вероятности, чтобы исключить ложный выбор на фоны/тени
+                        if (consecutiveViolations >= 2 && !isBlurActive) {
                             isBlurActive = true;
                             nsfwBlurOverlay.style.display = 'flex';
                         }
                     } else {
                         cleanFrames++;
-                        if (cleanFrames >= 3 && isBlurActive) {
+                        // Снимаем блюр после 4 нормальных кадров
+                        if (cleanFrames >= 4 && isBlurActive) {
                             consecutiveViolations = 0;
                             isBlurActive = false;
                             nsfwBlurOverlay.style.display = 'none';
                         }
                     }
                 } catch (e) {
+                    console.error("Ошибка при проверке кадра:", e);
                 } finally {
                     isClassifying = false;
                 }
-            }, 700);
+            }, 500); // Проверка 2 раза в секунду
         }
 
         function stopNSFWMonitoring() {
