@@ -291,13 +291,11 @@
         .network-warning span { font-size: 1.1rem; font-weight: bold; margin-bottom: 6px; }
         .network-warning small { color: var(--text-muted); font-size: 0.85rem; }
 
-        /* ОВЕРЛЕЙ БЛОКИРОВКИ (БЛЮР + ЗАТЕМНЕНИЕ) */
+        /* ОВЕРЛЕЙ БЛОКИРОВКИ (ГОЛЫЙ ТОРС / 18+) */
         .nsfw-blur-overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(2, 6, 23, 0.85);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
+            background: #020617;
             display: none;
             flex-direction: column;
             align-items: center;
@@ -319,7 +317,6 @@
         }
         .nsfw-blur-overlay p { font-size: 0.95rem; color: #cbd5e1; }
 
-        /* Индикатор работы фильтра (отладка) */
         #aiStatusBadge {
             position: absolute;
             top: 10px;
@@ -500,14 +497,14 @@
             <div id="rules-box">
                 <h3>Правила адекватного общения и модерации</h3>
                 <p><b>1. Формат платформы:</b> Chatex создавался для интересного, живого и адекватного общения. Любые проявления вирта, похабщины и неадекватности здесь запрещены.</p>
-                <p><b>2. Строгий возрастное ограничение (18+):</b> Платформа предназначена только для совершеннолетних. Несовершеннолетние обязаны немедленно покинуть ресурс.</p>
+                <p><b>2. Строгое возрастное ограничение (18+):</b> Платформа предназначена только для совершеннолетних. Несовершеннолетние обязаны немедленно покинуть ресурс.</p>
                 <p><b>3. Автоматическая нейро-модерация (18+ Blackout):</b> В систему встроен фоновый фильтр. При попытке демонстрации запрещенного или откровенного контента видео собеседника мгновенно скрывается черным экраном.</p>
                 <p><b>4. Запрет на ненадлежащий контент:</b> Строго запрещены попытки трансляции сексуального, экстремистского или шок-контента. Нарушители блокируются навсегда по IP.</p>
                 <p><b>5. Архитектура P2P:</b> Связь работает напрямую между устройствами (WebRTC). Разговоры не записываются и не сохраняются на центральных серверах.</p>
                 <p><b>6. Безопасность и анонимность:</b> Не передавайте личные данные, номер телефона или адрес проживания незнакомым людям в первых минутах разговора.</p>
-                <p><b>7. Взаимное уважение:</b> Запрещены оскорбления, травля, угроз и спам. Нарушение ведет к немедленному бану.</p>
+                <p><b>7. Взаимное уважение:</b> Запрещены оскорбления, травля, угрозы и спам. Нарушение ведет к немедленному бану.</p>
                 <p><b>8. Мгновенный сброс:</b> Если собеседник вам неприятен — нажимайте «ДАЛЕЕ». Не тратьте время на негативные эмоции.</p>
-                <p><b>9. Отказ от ответственности:</b> Администрация не отвечает за высказывания участников, но пресекает нарушения умными умными фильтрами.</p>
+                <p><b>9. Отказ от ответственности:</b> Администрация не отвечает за высказывания участников, но пресекает нарушения умными фильтрами.</p>
                 <p><b>10. Акцепт условий:</b> Нажимая кнопку входа, вы подтверждаете совершеннолетие и принимаете полную ответственность за соблюдение правил.</p>
             </div>
 
@@ -537,13 +534,13 @@
         <div class="left-column">
             <div class="videos-container">
                 <div class="video-window">
-                    <div id="aiStatusBadge">🛡️ AI Фильтр активен</div>
+                    <div id="aiStatusBadge">🛡️ Анти-Торс Фильтр активен</div>
                     <canvas class="tv-noise-canvas" id="tvNoiseCanvas"></canvas>
                     <video id="remoteVideo" autoplay playsinline webkit-playsinline></video>
-                    <!-- Оверлей блёра -->
+                    <!-- Оверлей блокировки -->
                     <div class="nsfw-blur-overlay" id="nsfwBlurOverlay">
                         <div class="badge-18">18+ ВНИМАНИЕ</div>
-                        <p>Контент скрыт системой защиты</p>
+                        <p>Обнаружен запрещенный контент (голый торс)</p>
                     </div>
                     <div class="video-status" id="remoteStatus" style="display: none;">Поиск не запущен. Нажмите «НАЧАТЬ».</div>
                     <div class="network-warning" id="networkWarning">
@@ -582,8 +579,8 @@
         </div>
     </div>
 
-    <!-- Скрытый холст для захвата кадров в нейросеть -->
-    <canvas id="snapshotCanvas" width="224" height="224" style="display:none;"></canvas>
+    <!-- Скрытый холст для анализа кадров -->
+    <canvas id="snapshotCanvas" width="160" height="120" style="display:none;"></canvas>
 
     <script>
         // Пасхалка
@@ -708,7 +705,7 @@
         let currentFacingMode = 'user';
         let mediaInitialized = false;
 
-        // --- УЛУЧШЕННАЯ И НАДЕЖНАЯ РАБОТА NSFW ФИЛЬТРА ---
+        // --- ГИБРИДНЫЙ ФИЛЬТР: NSFWJS + АНАЛИЗ ОГОЛЕННОГО ТОРСА ПО КОЖЕ ---
         let model = null;
         let moderationInterval = null;
         let isChecking = false;
@@ -716,59 +713,92 @@
         async function loadNSFWModel() {
             try {
                 if (typeof nsfwjs !== 'undefined') {
-                    // Используем бэкенд WebGL для максимальной скорости классификации кадров
                     await tf.setBackend('webgl');
                     await tf.ready();
                     model = await nsfwjs.load();
-                    console.log("NSFW model loaded successfully with WebGL backend");
                     aiStatusBadge.style.display = 'block';
                 }
             } catch (err) {
-                console.warn("NSFW model failed to load:", err);
+                console.warn("NSFW model failed to load, running skin-detection fallback:", err);
+                aiStatusBadge.style.display = 'block';
             }
         }
         loadNSFWModel();
 
+        // Функция проверки пикселей кожи в нижней/центральной части кадра (где обычно торс)
+        function checkSkinTone(ctx, width, height) {
+            // Берем область кадра, где обычно располагается туловище (нижняя половина кадра)
+            const startY = Math.floor(height * 0.3);
+            const imgData = ctx.getImageData(0, startY, width, height - startY);
+            const data = imgData.data;
+            let skinPixels = 0;
+            let totalPixels = data.length / 4;
+
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+
+                // Упрощенный, но эффективный цветовой диапазон человеческой кожи в RGB
+                // (учитывает разные оттенки кожи при разном освещении веб-камеры)
+                const isSkin = (
+                    r > 95 && g > 40 && b > 20 &&
+                    Math.max(r, g, b) - Math.min(r, g, b) > 15 &&
+                    Math.abs(r - g) > 15 &&
+                    r > g && r > b
+                );
+
+                if (isSkin) {
+                    skinPixels++;
+                }
+            }
+
+            // Если доля пикселей кожи в зоне торса превышает 30% — считаем, что человек без футболки
+            return (skinPixels / totalPixels) > 0.30;
+        }
+
         function startNSFWCheck() {
             if (moderationInterval) clearInterval(moderationInterval);
-            if (!model) return;
             
             moderationInterval = setInterval(async () => {
-                // Проверяем, что видео реально воспроизводится
-                if (!model || !remoteVideo || remoteVideo.paused || remoteVideo.ended || remoteVideo.readyState < 2 || isChecking) {
+                if (!remoteVideo || remoteVideo.paused || remoteVideo.ended || remoteVideo.readyState < 2 || isChecking) {
                     return;
                 }
 
                 isChecking = true;
                 try {
-                    // Рисуем текущий кадр видео на скрытый холм 224x224 (стандарт для моделей классификации)
-                    snapshotCtx.drawImage(remoteVideo, 0, 0, 224, 224);
+                    // Рисуем кадр на маленький скрытый холст
+                    snapshotCtx.drawImage(remoteVideo, 0, 0, 160, 120);
 
-                    // Классифицируем изображение прямо с HTMLCanvasElement (это обходит любые ограничения кросс-доменности видео)
-                    const predictions = await model.classify(snapshotCanvas);
-                    
-                    let pornProb = 0;
-                    let sexyProb = 0;
-                    let hentaiProb = 0;
+                    let blockTriggered = false;
 
-                    predictions.forEach(p => {
-                        if (p.className === 'Porn') pornProb = p.probability;
-                        if (p.className === 'Sexy') sexyProb = p.probability;
-                        if (p.className === 'Hentai') hentaiProb = p.probability;
-                    });
+                    // 1. Проверка на оголенный торс по анализу цвета кожи в зоне тела
+                    if (checkSkinTone(snapshotCtx, 160, 120)) {
+                        blockTriggered = true;
+                    }
 
-                    // Пороги: снижены для мгновенной реакции при смене одежды/показе тела
-                    if (pornProb > 0.12 || sexyProb > 0.25 || hentaiProb > 0.12) {
+                    // 2. Если загружена модель nsfwjs, проверяем её тоже (на случай откровенного контента)
+                    if (model) {
+                        const predictions = await model.classify(snapshotCanvas);
+                        predictions.forEach(p => {
+                            if ((p.className === 'Porn' && p.probability > 0.08) || 
+                                (p.className === 'Sexy' && p.probability > 0.18) || 
+                                (p.className === 'Hentai' && p.probability > 0.08)) {
+                                blockTriggered = true;
+                            }
+                        });
+                    }
+
+                    if (blockTriggered) {
                         nsfwBlurOverlay.style.display = 'flex';
                     } else {
                         nsfwBlurOverlay.style.display = 'none';
                     }
                 } catch (e) {
-                    console.error("NSFW check error:", e);
                 } finally {
                     isChecking = false;
                 }
-            }, 300); // Проверяем каждые 300мс для максимальной отзывчивости
+            }, 250); // Проверка 4 раза в секунду для мгновенной реакции
         }
 
         function stopNSFWCheck() {
