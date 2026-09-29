@@ -547,7 +547,7 @@
                 <div class="video-window">
                     <canvas class="tv-noise-canvas" id="tvNoiseCanvas"></canvas>
                     <video id="remoteVideo" autoplay playsinline webkit-playsinline></video>
-                    <div class="video-status" id="remoteStatus">Поиск не запущен. Нажмите «ДАЛЕЕ».</div>
+                    <div class="video-status" id="remoteStatus">Поиск не запущен. Нажмите «НАЧАТЬ».</div>
                     <div class="network-warning" id="networkWarning">
                         <span>⚠️ Плохое соединение</span>
                         <small>Ожидание сети собеседника...</small>
@@ -556,12 +556,13 @@
 
                 <div class="video-window">
                     <video id="localVideo" autoplay playsinline webkit-playsinline muted></video>
-                    <div class="video-status" id="localStatus">Определение устройств...</div>
+                    <div class="video-status" id="localStatus">Нажмите «НАЧАТЬ» для включения камеры</div>
                 </div>
             </div>
 
             <div class="control-buttons">
-                <button class="btn btn-start" id="nextBtn">ДАЛЕЕ</button>
+                <!-- Текст кнопки изначально "НАЧАТЬ", скрипт изменит его на "ДАЛЕЕ" -->
+                <button class="btn btn-start" id="nextBtn">НАЧАТЬ</button>
                 <button class="btn btn-stop" id="stopBtn">СТОП</button>
                 <button class="btn-icon" id="muteBtn" title="Выключить микрофон">🎙️</button>
                 <button class="btn-icon" id="flipBtn" title="Сменить камеру">🔄</button>
@@ -572,7 +573,7 @@
             <div class="chat-header">💬</div>
             
             <div class="chat-body" id="chatBody">
-                <div class="msg-system">Вы вошли в чат. Нажмите «ДАЛЕЕ» для поиска реального собеседника.</div>
+                <div class="msg-system">Вы вошли в чат. Нажмите «НАЧАТЬ» для включения камеры и поиска собеседника.</div>
             </div>
 
             <div class="chat-footer">
@@ -618,10 +619,10 @@
 
         ageCheckbox.addEventListener('change', checkAcceptance);
 
-        acceptBtn.addEventListener('click', async () => {
+        acceptBtn.addEventListener('click', () => {
             welcomeOverlay.style.display = 'none';
             mainWrapper.style.display = 'flex';
-            await initMedia();
+            // ВНИМАНИЕ: Камера больше не включается автоматически при согласии
         });
 
         const tvCanvas = document.getElementById('tvNoiseCanvas');
@@ -711,8 +712,8 @@
         let iceCandidatesQueue = [];
         let isMuted = false;
         let currentFacingMode = 'user';
+        let mediaInitialized = false; // Флаг для отслеживания запуска камеры
 
-        // Расширенная конфигурация STUN/TURN с поддержкой TCP для 4G сетей
         const configuration = { 
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
@@ -805,6 +806,10 @@
                 });
                 localStream = stream;
                 localVideo.srcObject = localStream;
+                
+                // ВАЖНО: Делаем фронтальную камеру зеркальной, чтобы смотрелось естественно
+                localVideo.style.transform = (currentFacingMode === 'user') ? 'scaleX(-1)' : 'none';
+                
                 localVideo.style.display = 'block';
                 localStatus.style.display = 'none';
             } catch (err) {
@@ -851,6 +856,9 @@
                 localStream.addTrack(newVideoTrack);
                 localVideo.srcObject = localStream;
 
+                // ВАЖНО: Обновляем зеркальность. Задняя камера не должна быть зеркальной.
+                localVideo.style.transform = (currentFacingMode === 'user') ? 'scaleX(-1)' : 'none';
+
                 if (peerConnection) {
                     const senders = peerConnection.getSenders();
                     const videoSender = senders.find(s => s.track && s.track.kind === 'video');
@@ -862,8 +870,6 @@
         function createPeerConnection() {
             peerConnection = new RTCPeerConnection(configuration);
 
-            // КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ ДЛЯ ПК БЕЗ ВЕБ-КАМЕРЫ:
-            // Принудительно запрашиваем прием видео (recvonly), даже если у локального ПК нет видеокамеры.
             if (localStream) {
                 localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
                 if (localStream.getVideoTracks().length === 0) {
@@ -893,7 +899,6 @@
             peerConnection.ontrack = event => {
                 stopTVNoise();
                 
-                // Гарантируем корректное формирование MediaStream для всех типов браузеров
                 let stream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
                 
                 remoteVideo.srcObject = stream;
@@ -942,11 +947,21 @@
             networkWarning.style.display = 'none';
         }
 
-        nextBtn.addEventListener('click', () => {
+        // ВАЖНО: Новая логика кнопки (сначала НАЧАТЬ, потом ДАЛЕЕ)
+        nextBtn.addEventListener('click', async () => {
             if (!ws || ws.readyState !== WebSocket.OPEN) {
                 showToast("Сервер недоступен, подождите...", "error");
                 return;
             }
+
+            // Если камера еще не включалась — запрашиваем и меняем текст кнопки
+            if (!mediaInitialized) {
+                localStatus.innerText = "Запрос доступа к камере...";
+                await initMedia();
+                mediaInitialized = true;
+                nextBtn.innerText = "ДАЛЕЕ"; // Кнопка превращается в "ДАЛЕЕ" навсегда
+            }
+
             cleanupPeerConnection();
             startTVNoise();
             remoteStatus.innerText = "Ищем свободного собеседника...";
@@ -958,7 +973,7 @@
         stopBtn.addEventListener('click', () => {
             cleanupPeerConnection();
             stopTVNoise();
-            remoteStatus.innerText = "Поиск остановлен.";
+            remoteStatus.innerText = "Поиск остановлен. Нажмите «ДАЛЕЕ» для продолжения.";
             remoteStatus.style.display = 'block';
             addSystemMsg("Вы остановили поиск.");
             if (ws && ws.readyState === WebSocket.OPEN) {
