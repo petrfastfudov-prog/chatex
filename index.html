@@ -46,7 +46,7 @@
             touch-action: none;
         }
 
-        /* --- ЗАСТАВКА С ПРАВИЛАМИ --- */
+        /* ЗАСТАВКА С ПРАВИЛАМИ */
         #welcome-overlay {
             position: fixed;
             top: 0;
@@ -291,7 +291,7 @@
         .network-warning span { font-size: 1.1rem; font-weight: bold; margin-bottom: 6px; }
         .network-warning small { color: var(--text-muted); font-size: 0.85rem; }
 
-        /* ЖЕСТКИЙ ЧЕРНЫЙ ЭКРАН */
+        /* ОВЕРЛЕЙ БЛОКИРОВКИ */
         .nsfw-blur-overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -564,11 +564,8 @@
         </div>
     </div>
 
-    <!-- Скрытый канвас для надежной обработки кадров нейросетью -->
-    <canvas id="analysisCanvas" style="display:none;"></canvas>
-
     <script>
-        // Пасхалка: 5 кликов показать, еще 5 - скрыть
+        // Пасхалка
         const brandTitle = document.getElementById('brandTitle');
         const creatorTag = document.getElementById('creator-tag');
         let clickCount = 0;
@@ -664,14 +661,6 @@
             tvCanvas.style.display = 'none';
         }
 
-        window.addEventListener('offline', () => {
-            addSystemMsg('Интернет соединение потеряно.', 'error');
-        });
-
-        window.addEventListener('online', () => {
-            if (!ws || ws.readyState !== WebSocket.OPEN) connectWebSocket();
-        });
-
         const localVideo = document.getElementById('localVideo');
         const remoteVideo = document.getElementById('remoteVideo');
         const localStatus = document.getElementById('localStatus');
@@ -685,9 +674,6 @@
         const chatBody = document.getElementById('chatBody');
         const chatInput = document.getElementById('chatInput');
         const sendBtn = document.getElementById('sendBtn');
-        
-        const analysisCanvas = document.getElementById('analysisCanvas');
-        const analysisCtx = analysisCanvas.getContext('2d');
 
         let localStream = null;
         let peerConnection = null;
@@ -697,83 +683,56 @@
         let currentFacingMode = 'user';
         let mediaInitialized = false;
 
-        // --- УЛЬТРАНАДЕЖНЫЙ NSFW ФИЛЬТР ЧЕРЕЗ КАНВАС ---
-        let nsfwModel = null;
-        let nsfwInterval = null;
-        let isBlurActive = false;
-        let isClassifying = false;
+        // --- ВОССТАНОВЛЕННЫЙ РАБОЧИЙ NSFW ФИЛЬТР ---
+        let model = null;
+        let moderationInterval = null;
 
-        async function initNSFWModel() {
+        async function loadNSFWModel() {
             try {
-                if (typeof tf !== 'undefined') {
-                    await tf.setBackend('cpu'); // Принудительно CPU во избежание падений WebGL на старых девайсах
-                    await tf.ready();
-                }
-                if (window.nsfwjs) {
-                    nsfwModel = await nsfwjs.load();
-                }
-            } catch (e) {
-                console.error("NSFW load error:", e);
+                model = await nsfwjs.load();
+                console.log("NSFW model loaded successfully");
+            } catch (err) {
+                console.error("Failed to load NSFW model:", err);
             }
         }
-        initNSFWModel();
+        loadNSFWModel();
 
-        function startNSFWMonitoring() {
-            if (nsfwInterval) clearInterval(nsfwInterval);
-            isBlurActive = false;
-            isClassifying = false;
+        function startNSFWCheck() {
+            if (moderationInterval) clearInterval(moderationInterval);
             
-            nsfwInterval = setInterval(async () => {
-                if (!remoteVideo || remoteVideo.paused || remoteVideo.ended || remoteVideo.readyState < 2 || !nsfwModel || isClassifying) {
+            moderationInterval = setInterval(async () => {
+                if (!model || !remoteVideo || remoteVideo.paused || remoteVideo.ended || remoteVideo.readyState < 2) {
                     return;
                 }
-                
-                isClassifying = true;
                 try {
-                    // Конвертируем текущий кадр видео в канвас, чтобы модель не зависала на HTMLVideoElement
-                    if (analysisCanvas.width !== 224 || analysisCanvas.height !== 224) {
-                        analysisCanvas.width = 224;
-                        analysisCanvas.height = 224;
-                    }
-                    analysisCtx.drawImage(remoteVideo, 0, 0, 224, 224);
+                    const predictions = await model.classify(remoteVideo);
+                    let pornProb = 0;
+                    let sexyProb = 0;
+                    let hentaiProb = 0;
 
-                    const predictions = await nsfwModel.classify(analysisCanvas);
-                    
-                    let porn = 0, sexy = 0, hentai = 0;
-                    for (let i = 0; i < predictions.length; i++) {
-                        if (predictions[i].className === 'Porn') porn = predictions[i].probability;
-                        if (predictions[i].className === 'Sexy') sexy = predictions[i].probability;
-                        if (predictions[i].className === 'Hentai') hentai = predictions[i].probability;
-                    }
+                    predictions.forEach(p => {
+                        if (p.className === 'Porn') pornProb = p.probability;
+                        if (p.className === 'Sexy') sexyProb = p.probability;
+                        if (p.className === 'Hentai') hentaiProb = p.probability;
+                    });
 
-                    // Четкие пороги: срабатывает даже на обнаженный торс / эротику
-                    const violationDetected = (porn > 0.15 || sexy > 0.25 || hentai > 0.15);
-
-                    if (violationDetected) {
-                        if (!isBlurActive) {
-                            isBlurActive = true;
-                            nsfwBlurOverlay.style.display = 'flex';
-                        }
+                    // Чувствительные пороги для мгновенного перекрытия
+                    if (pornProb > 0.15 || sexyProb > 0.3 || hentaiProb > 0.15) {
+                        nsfwBlurOverlay.style.display = 'flex';
                     } else {
-                        if (isBlurActive) {
-                            isBlurActive = false;
-                            nsfwBlurOverlay.style.display = 'none';
-                        }
+                        nsfwBlurOverlay.style.display = 'none';
                     }
                 } catch (e) {
-                } finally {
-                    isClassifying = false;
+                    // Ошибки классификации кадров игнорируем, чтобы не ломать цикл
                 }
-            }, 300); // Проверка каждые 300 мс для максимальной скорости реакции
+            }, 400);
         }
 
-        function stopNSFWMonitoring() {
-            if (nsfwInterval) {
-                clearInterval(nsfwInterval);
-                nsfwInterval = null;
+        function stopNSFWCheck() {
+            if (moderationInterval) {
+                clearInterval(moderationInterval);
+                moderationInterval = null;
             }
-            isBlurActive = false;
-            isClassifying = false;
             nsfwBlurOverlay.style.display = 'none';
         }
 
@@ -872,11 +831,7 @@
                     audio: { 
                         echoCancellation: true, 
                         noiseSuppression: true, 
-                        autoGainControl: true,
-                        googEchoCancellation: true,
-                        googAutoGainControl: true,
-                        googNoiseSuppression: true,
-                        googHighpassFilter: true
+                        autoGainControl: true 
                     }
                 });
                 localStream = stream;
@@ -916,10 +871,7 @@
 
             if (localStream) {
                 localStream.getTracks().forEach(track => {
-                    const sender = peerConnection.addTrack(track, localStream);
-                    if (track.kind === 'video' && 'contentHint' in sender) {
-                        sender.contentHint = 'motion';
-                    }
+                    peerConnection.addTrack(track, localStream);
                 });
             }
 
@@ -929,7 +881,7 @@
                     remoteVideo.style.display = 'block';
                     stopTVNoise();
                     remoteStatus.style.display = 'none';
-                    startNSFWMonitoring();
+                    startNSFWCheck();
                 }
             };
 
@@ -974,7 +926,7 @@
         }
 
         function cleanupPeerConnection() {
-            stopNSFWMonitoring();
+            stopNSFWCheck();
             if (peerConnection) {
                 peerConnection.ontrack = null;
                 peerConnection.onicecandidate = null;
