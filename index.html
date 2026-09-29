@@ -545,7 +545,8 @@
                 <div class="video-window">
                     <canvas class="tv-noise-canvas" id="tvNoiseCanvas"></canvas>
                     <video id="remoteVideo" autoplay playsinline webkit-playsinline></video>
-                    <div class="video-status" id="remoteStatus">Поиск не запущен. Нажмите «НАЧАТЬ».</div>
+                    <!-- Статус-плашка поверх видео для предупреждения о блэкауте -->
+                    <div class="video-status" id="remoteStatus" style="display: none;">Поиск не запущен. Нажмите «НАЧАТЬ».</div>
                     <div class="network-warning" id="networkWarning">
                         <span>⚠️ Плохое соединение</span>
                         <small>Ожидание сети собеседника...</small>
@@ -710,11 +711,11 @@
         let currentFacingMode = 'user';
         let mediaInitialized = false;
 
-        // --- ДВУХУРОВНЕВАЯ СИСТЕМА ДЕТЕКЦИИ ОБНАЖЕНИЯИ И NSFW ---
+        // --- ДИНАМИЧЕСКИЙ NSFW БЛЭКАУТ (БЕЗ РАЗРЫВА СВЯЗИ) ---
         let nsfwModel = null;
         let nsfwInterval = null;
+        let isBlackoutActive = false; // Состояние скрытия видео
 
-        // Скрытый холст для экспресс-анализа кадров
         const offCanvas = document.createElement('canvas');
         offCanvas.width = 224;
         offCanvas.height = 224;
@@ -732,19 +733,17 @@
         }
         initNSFWModel();
 
-        // Алгоритм поиска кожи в цветовом пространстве YCbCr (работает со всеми оттенками)
         function calculateSkinRatio(ctx, width, height) {
             const imgData = ctx.getImageData(0, 0, width, height);
             const data = imgData.data;
             let skinPixels = 0;
             let totalPixels = 0;
 
-            for (let i = 0; i < data.length; i += 16) { // шаг 4 пикселя для высокого FPS
+            for (let i = 0; i < data.length; i += 16) {
                 const r = data[i];
                 const g = data[i + 1];
                 const b = data[i + 2];
 
-                // Формула YCbCr
                 const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
                 const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
 
@@ -760,16 +759,12 @@
             if (nsfwInterval) clearInterval(nsfwInterval);
             
             nsfwInterval = setInterval(async () => {
-                if (!remoteVideo || remoteVideo.style.display === 'none' || remoteVideo.paused || remoteVideo.readyState < 2) return;
+                if (!remoteVideo || remoteVideo.paused || remoteVideo.readyState < 2) return;
                 
                 try {
-                    // 1. Отрисовываем кадр на скрытом Canvas
                     offCtx.drawImage(remoteVideo, 0, 0, 224, 224);
-
-                    // 2. Считаем процент площади голой кожи
                     const skinRatio = calculateSkinRatio(offCtx, 224, 224);
 
-                    // 3. Сканируем нейросетью NSFWJS
                     let porn = 0, sexy = 0, hentai = 0;
                     if (nsfwModel) {
                         const predictions = await nsfwModel.classify(offCanvas);
@@ -778,12 +773,25 @@
                         hentai = predictions.find(p => p.className === 'Hentai')?.probability || 0;
                     }
 
-                    console.log(`Скан: Кожа=${(skinRatio*100).toFixed(1)}%, Porn=${(porn*100).toFixed(1)}%, Sexy=${(sexy*100).toFixed(1)}%`);
+                    // Условие обнаружения нарушения
+                    const violationDetected = (skinRatio > 0.28 || porn > 0.15 || sexy > 0.30 || hentai > 0.20);
 
-                    // КРИТЕРИИ БЛОКИРОВКИ:
-                    // Если открытой кожи на экране >28% (снятая футболка/торс) ИЛИ NSFWJS нашел откровенный контент
-                    if (skinRatio > 0.28 || porn > 0.15 || sexy > 0.30 || hentai > 0.20) {
-                        triggerBlackout();
+                    if (violationDetected) {
+                        if (!isBlackoutActive) {
+                            isBlackoutActive = true;
+                            remoteVideo.style.display = 'none'; // Скрываем только видео, связь не рвем!
+                            remoteStatus.innerText = "🛑 СИГНАЛ СКРЫТ: NSFW Blackout";
+                            remoteStatus.style.display = 'block';
+                            showToast("Обнаружен запрещенный контент — видео скрыто.", "warning");
+                        }
+                    } else {
+                        // Если собеседник убрал нарушение — возвращаем видео обратно автоматически!
+                        if (isBlackoutActive) {
+                            isBlackoutActive = false;
+                            remoteVideo.style.display = 'block';
+                            remoteStatus.style.display = 'none';
+                            showToast("Контент в норме — трансляция восстановлена.", "success");
+                        }
                     }
                 } catch (e) {
                     console.error("Ошибка сканирования:", e);
@@ -796,21 +804,8 @@
                 clearInterval(nsfwInterval);
                 nsfwInterval = null;
             }
+            isBlackoutActive = false;
         }
-
-        function triggerBlackout() {
-            stopNSFWMonitoring();
-            if (peerConnection) cleanupPeerConnection();
-            
-            remoteVideo.style.display = 'none';
-            remoteStatus.innerText = "🛑 СИГНАЛ ЗАБЛОКИРОВАН: Обнаружен запрещенный контент (NSFW Blackout)";
-            remoteStatus.style.display = 'block';
-            
-            showToast("Обнаружен запрещенный контент! Трансляция заблокирована.", "error");
-            addSystemMsg("Трансляция прервана фильтром безопасности.", "msg-error");
-        }
-
-        window.testBlackout = triggerBlackout;
 
         const configuration = { 
             iceServers: [
@@ -1020,8 +1015,10 @@
                 let stream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
                 
                 remoteVideo.srcObject = stream;
-                remoteVideo.style.display = 'block';
-                remoteStatus.style.display = 'none';
+                if (!isBlackoutActive) {
+                    remoteVideo.style.display = 'block';
+                    remoteStatus.style.display = 'none';
+                }
 
                 remoteVideo.muted = false;
                 remoteVideo.volume = 1.0;
