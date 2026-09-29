@@ -727,12 +727,13 @@
         let currentFacingMode = 'user';
         let mediaInitialized = false;
 
-        // --- ЖЕСТКИЙ NSFW ФИЛЬТР: ЛОВИТ ДАЖЕ ГОЛЫЙ ТОРС ---
+        // --- ЖЕСТКИЙ NSFW ФИЛЬТР ---
         let nsfwModel = null;
         let nsfwInterval = null;
         let isBlurActive = false;
         let consecutiveViolations = 0;
         let cleanFrames = 0;
+        let isClassifying = false;
 
         const offCanvas = document.createElement('canvas');
         offCanvas.width = 224;
@@ -752,11 +753,12 @@
             if (nsfwInterval) clearInterval(nsfwInterval);
             consecutiveViolations = 0;
             cleanFrames = 0;
+            isClassifying = false;
             
-            // Интервал уменьшен до 800мс для более быстрой реакции
             nsfwInterval = setInterval(async () => {
-                if (!remoteVideo || remoteVideo.paused || remoteVideo.readyState < 2 || !nsfwModel) return;
+                if (!remoteVideo || remoteVideo.paused || remoteVideo.readyState < 2 || !nsfwModel || isClassifying) return;
                 
+                isClassifying = true;
                 try {
                     offCtx.drawImage(remoteVideo, 0, 0, 224, 224);
                     
@@ -765,29 +767,30 @@
                     const sexy = predictions.find(p => p.className === 'Sexy')?.probability || 0;
                     const hentai = predictions.find(p => p.className === 'Hentai')?.probability || 0;
 
-                    // Экстремально низкие пороги: срабатывает на любой намек на оголение тела (торс, декольте)
+                    // Пороги срабатывания: мгновенно на открытый контент или голый торс
                     const violationDetected = (porn > 0.15 || hentai > 0.20 || sexy > 0.20);
 
                     if (violationDetected) {
                         consecutiveViolations++;
-                        cleanFrames = 0; // Сбрасываем чистые кадры
+                        cleanFrames = 0;
                         
-                        // СРАБАТЫВАЕТ МОМЕНТАЛЬНО НА 1-м ЖЕ КАДРЕ
                         if (consecutiveViolations >= 1 && !isBlurActive) {
                             isBlurActive = true;
                             nsfwBlurOverlay.style.display = 'flex';
                         }
                     } else {
                         cleanFrames++;
-                        // Снимает блюр ТОЛЬКО если 3 кадра подряд (около 2.5 секунд) картинка "чистая"
                         if (cleanFrames >= 3 && isBlurActive) {
                             consecutiveViolations = 0;
                             isBlurActive = false;
                             nsfwBlurOverlay.style.display = 'none';
                         }
                     }
-                } catch (e) {}
-            }, 800);
+                } catch (e) {
+                } finally {
+                    isClassifying = false;
+                }
+            }, 700);
         }
 
         function stopNSFWMonitoring() {
@@ -798,6 +801,7 @@
             isBlurActive = false;
             consecutiveViolations = 0;
             cleanFrames = 0;
+            isClassifying = false;
             nsfwBlurOverlay.style.display = 'none';
         }
 
