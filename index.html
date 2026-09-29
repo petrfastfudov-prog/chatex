@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Chatex — Анонимный Чат</title>
+    
+    <!-- TensorFlow.js и NSFWJS для фильтрации контента -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/nsfwjs@2.4.2/dist/nsfwjs.min.js"></script>
+
     <style>
         :root {
             --bg-main: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #0f172a 60%, #020617 100%);
@@ -300,6 +305,8 @@
             position: absolute;
             top: 0; left: 0;
             z-index: 1;
+            transform: none !important;
+            -webkit-transform: none !important;
         }
 
         .tv-noise-canvas {
@@ -491,38 +498,38 @@
     <div id="welcome-overlay">
         <div id="welcome-modal">
             <div class="modal-header">
-                <div class="modal-title">⚡ Chatex — Условия использования</div>
+                <div class="modal-title">⚡ Chatex — Адекватный Чат</div>
                 <div class="modal-badge">18+</div>
             </div>
             
-            <p style="color: var(--text-muted); font-size: 0.9rem;">Внимательно ознакомьтесь с правилами платформы. Прокрутите текст до конца для активации входа.</p>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">Ознакомьтесь с регламентом платформы. Прокрутите текст до конца для входа.</p>
             
             <div id="rules-box">
-                <h3>Юридическое пользовательское соглашение</h3>
-                <p><b>1. Общие положения и акцепт:</b> Настоящее Соглашение определяет условия предоставления доступа к анонимному аудио- и видеочату Chatex. Начало использования сервиса означает полное и безоговорочное принятие всех пунктов данного регламента.</p>
+                <h3>Правила адекватного общения и модерации</h3>
+                <p><b>1. Формат платформы:</b> Chatex создавался для интересного, живого и адекватного общения. Любые проявления вирта, похабщины и неадекватности здесь запрещены.</p>
                 
-                <p><b>2. Строгое возрастное ограничение (18+):</b> Сервис предназначен исключительно для совершеннолетних лиц. Если вам не исполнилось 18 лет, вы обязаны немедленно покинуть данную интернет-страницу и закрыть вкладку браузера.</p>
+                <p><b>2. Строгий возрастное ограничение (18+):</b> Платформа предназначена только для совершеннолетних. Несовершеннолетние обязаны немедленно покинуть ресурс.</p>
                 
-                <p><b>3. Полный отказ от ответственности Администрации:</b> Администрация сайта не берет на себя никакой ответственности за противоправные действия пользователей, моральный или материальный ущерб, а также за достоверность информации, передаваемой в ходе бесед.</p>
+                <p><b>3. Автоматическая нейро-модерация (NSFW Blackout):</b> В систему встроен фоновый фильтр. При попытке обнажения или демонстрации гениталий трансляция собеседника мгновенно блокируется черным экраном.</p>
                 
-                <p><b>4. Архитектура P2P и конфиденциальность:</b> Соединение устанавливается напрямую между абонентами (Peer-to-Peer / WebRTC). Администрация технически не имеет доступа к аудио и видеопотокам, не производит их запись, трансляцию через собственные центральные медиасерверы или архивное хранение.</p>
+                <p><b>4. Запрет на ненадлежащий контент:</b> Строго запрещены попытки трансляции сексуального, экстремистского или шок-контента. Нарушители блокируются навсегда по IP.</p>
                 
-                <p><b>5. Обязанности пользователя и запрещенный контент:</b> Пользователю категорически запрещается распространять материалы экстремистского характера, пропагандировать незаконные вещества, угрожать безопасности собеседников, заниматься шантажом, спамом или коммерческой рекламой.</p>
+                <p><b>5. Архитектура P2P:</b> Связь работает напрямую между устройствами (WebRTC). Разговоры не записываются и не сохраняются на центральных серверах.</p>
                 
-                <p><b>6. Прекращение сеанса при нарушениях:</b> Если собеседник нарушает нормы морали или правила сервиса, пользователь обязан незамедлительно разорвать соединение с помощью функциональных клавиш интерфейса и прекратить любое дальнейшее взаимодействие.</p>
+                <p><b>6. Безопасность и анонимность:</b> Не передавайте личные данные, номер телефона или адрес проживания незнакомым людям в первых минутах разговора.</p>
                 
-                <p><b>7. Отсутствие персональных данных и регистрации:</b> Сервис функционирует без создания учетных записей, авторизации по электронной почте или номеру телефона. Идентификация личности пользователей на платформе не осуществляется.</p>
+                <p><b>7. Взаимное уважение:</b> Запрещены оскорбления, травля, угроз и спам. Нарушение ведет к немедленному бану.</p>
                 
-                <p><b>8. Ограничение работоспособности («Как есть»):</b> Услуги предоставляются по принципу «как есть» (as is). Администрация не гарантирует бесперебойную работу каналов связи, отсутствие сетевых задержек, лагов или внезапных обрывов соединения ввиду особенностей мобильных провайдеров.</p>
+                <p><b>8. Мгновенный сброс:</b> Если собеседник вам неприятен — нажимайте «ДАЛЕЕ». Не тратьте время на негативные эмоции.</p>
                 
-                <p><b>9. Право на блокировку доступа:</b> При фиксировании подозрительной сетевой активности, DDoS-атак или массовых жалоб со стороны других участников, Администрация оставляет за собой право ограничить доступ к ресурсу для конкретных IP-адресов без предварительного уведомления.</p>
+                <p><b>9. Отказ от ответственности:</b> Администрация не отвечает за высказывания участников, но пресекает нарушения умными фильтрами.</p>
                 
-                <p><b>10. Юрисдикция и изменение правил:</b> Все спорные вопросы регулируются в соответствии с действующим законодательством. Администрация имеет право в одностороннем порядке вносить правки в текст соглашения, которые вступают в силу немедленно после их публикации на сайте.</p>
+                <p><b>10. Акцепт условий:</b> Нажимая кнопку входа, вы подтверждаете совершеннолетие и принимаете полную ответственность за соблюдение правил.</p>
             </div>
 
             <div class="checkbox-group" id="age-group">
                 <input type="checkbox" id="age-checkbox">
-                <label for="age-checkbox">Мне исполнилось 18 лет, я ознакомлен(а) с правилами и принимаю всю ответственность на себя</label>
+                <label for="age-checkbox">Мне есть 18 лет, я за адекватное общение и принимаю правила</label>
             </div>
 
             <button id="accept-btn" disabled>СОГЛАСИТЬСЯ И ВОЙТИ</button>
@@ -561,7 +568,6 @@
             </div>
 
             <div class="control-buttons">
-                <!-- Текст кнопки изначально "НАЧАТЬ", скрипт изменит его на "ДАЛЕЕ" -->
                 <button class="btn btn-start" id="nextBtn">НАЧАТЬ</button>
                 <button class="btn btn-stop" id="stopBtn">СТОП</button>
                 <button class="btn-icon" id="muteBtn" title="Выключить микрофон">🎙️</button>
@@ -622,7 +628,6 @@
         acceptBtn.addEventListener('click', () => {
             welcomeOverlay.style.display = 'none';
             mainWrapper.style.display = 'flex';
-            // ВНИМАНИЕ: Камера больше не включается автоматически при согласии
         });
 
         const tvCanvas = document.getElementById('tvNoiseCanvas');
@@ -712,7 +717,63 @@
         let iceCandidatesQueue = [];
         let isMuted = false;
         let currentFacingMode = 'user';
-        let mediaInitialized = false; // Флаг для отслеживания запуска камеры
+        let mediaInitialized = false;
+
+        // --- ИНИЦИАЛИЗАЦИЯ И ЛОГИКА NSFW ФИЛЬТРА ---
+        let nsfwModel = null;
+        let nsfwInterval = null;
+
+        async function initNSFWModel() {
+            try {
+                if (window.nsfwjs) {
+                    nsfwModel = await nsfwjs.load();
+                    console.log("NSFWJS Модель успешно загружена");
+                }
+            } catch (e) {
+                console.warn("Ошибка загрузки NSFWJS:", e);
+            }
+        }
+        initNSFWModel();
+
+        function startNSFWMonitoring() {
+            if (nsfwInterval) clearInterval(nsfwInterval);
+            nsfwInterval = setInterval(async () => {
+                if (!nsfwModel || !remoteVideo || remoteVideo.style.display === 'none' || remoteVideo.paused || remoteVideo.readyState < 2) return;
+                try {
+                    const predictions = await nsfwModel.classify(remoteVideo);
+                    const porn = predictions.find(p => p.className === 'Porn')?.probability || 0;
+                    const sexy = predictions.find(p => p.className === 'Sexy')?.probability || 0;
+                    const hentai = predictions.find(p => p.className === 'Hentai')?.probability || 0;
+
+                    // Если вероятность неприемлемого контента больше 55%
+                    if (porn > 0.55 || sexy > 0.75 || hentai > 0.60) {
+                        triggerBlackout();
+                    }
+                } catch (e) {}
+            }, 1500);
+        }
+
+        function stopNSFWMonitoring() {
+            if (nsfwInterval) {
+                clearInterval(nsfwInterval);
+                nsfwInterval = null;
+            }
+        }
+
+        function triggerBlackout() {
+            stopNSFWMonitoring();
+            if (peerConnection) cleanupPeerConnection();
+            
+            remoteVideo.style.display = 'none';
+            remoteStatus.innerText = "🛑 СИГНАЛ ЗАБЛОКИРОВАН: Обнаружен запрещенный контент (NSFW Blackout)";
+            remoteStatus.style.display = 'block';
+            
+            showToast("Обнаружен запрещенный контент! Трансляция заблокирована.", "error");
+            addSystemMsg("Трансляция прервана фильтром безопасности.", "msg-error");
+        }
+
+        // КОМАНДЫ ДЛЯ ТЕСТИРОВАНИЯ ИЗ КОНСОЛИ
+        window.testBlackout = triggerBlackout;
 
         const configuration = { 
             iceServers: [
@@ -806,10 +867,6 @@
                 });
                 localStream = stream;
                 localVideo.srcObject = localStream;
-                
-                // ВАЖНО: Делаем фронтальную камеру зеркальной, чтобы смотрелось естественно
-                localVideo.style.transform = (currentFacingMode === 'user') ? 'scaleX(-1)' : 'none';
-                
                 localVideo.style.display = 'block';
                 localStatus.style.display = 'none';
             } catch (err) {
@@ -856,9 +913,6 @@
                 localStream.addTrack(newVideoTrack);
                 localVideo.srcObject = localStream;
 
-                // ВАЖНО: Обновляем зеркальность. Задняя камера не должна быть зеркальной.
-                localVideo.style.transform = (currentFacingMode === 'user') ? 'scaleX(-1)' : 'none';
-
                 if (peerConnection) {
                     const senders = peerConnection.getSenders();
                     const videoSender = senders.find(s => s.track && s.track.kind === 'video');
@@ -888,6 +942,7 @@
                 if (state === 'connected' || state === 'completed') {
                     networkWarning.style.display = 'none';
                     stopTVNoise();
+                    startNSFWMonitoring(); // ЗАПУСКАЕМ ПРОВЕРКУ НЕЙРОСЕТИ ПРИ УСПЕШНОМ СОЕДИНЕНИИ
                 } else if (state === 'disconnected') {
                     networkWarning.style.display = 'flex';
                 } else if (state === 'failed') {
@@ -935,6 +990,7 @@
         }
 
         function cleanupPeerConnection() {
+            stopNSFWMonitoring();
             if (peerConnection) {
                 peerConnection.onicecandidate = null;
                 peerConnection.ontrack = null;
@@ -947,19 +1003,17 @@
             networkWarning.style.display = 'none';
         }
 
-        // ВАЖНО: Новая логика кнопки (сначала НАЧАТЬ, потом ДАЛЕЕ)
         nextBtn.addEventListener('click', async () => {
             if (!ws || ws.readyState !== WebSocket.OPEN) {
                 showToast("Сервер недоступен, подождите...", "error");
                 return;
             }
 
-            // Если камера еще не включалась — запрашиваем и меняем текст кнопки
             if (!mediaInitialized) {
                 localStatus.innerText = "Запрос доступа к камере...";
                 await initMedia();
                 mediaInitialized = true;
-                nextBtn.innerText = "ДАЛЕЕ"; // Кнопка превращается в "ДАЛЕЕ" навсегда
+                nextBtn.innerText = "ДАЛЕЕ";
             }
 
             cleanupPeerConnection();
