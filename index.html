@@ -545,7 +545,6 @@
                 <div class="video-window">
                     <canvas class="tv-noise-canvas" id="tvNoiseCanvas"></canvas>
                     <video id="remoteVideo" autoplay playsinline webkit-playsinline></video>
-                    <!-- Статус-плашка поверх видео для предупреждения о блэкауте -->
                     <div class="video-status" id="remoteStatus" style="display: none;">Поиск не запущен. Нажмите «НАЧАТЬ».</div>
                     <div class="network-warning" id="networkWarning">
                         <span>⚠️ Плохое соединение</span>
@@ -711,10 +710,10 @@
         let currentFacingMode = 'user';
         let mediaInitialized = false;
 
-        // --- ДИНАМИЧЕСКИЙ NSFW БЛЭКАУТ (БЕЗ РАЗРЫВА СВЯЗИ) ---
+        // --- УМНЫЙ ЗАЩИЩЕННЫЙ ФИЛЬТР (БЕЗ ЛОЖНЫХ СРАБАТЫВАНИЙ НА ЛИЦО И РУКИ) ---
         let nsfwModel = null;
         let nsfwInterval = null;
-        let isBlackoutActive = false; // Состояние скрытия видео
+        let isBlackoutActive = false;
 
         const offCanvas = document.createElement('canvas');
         offCanvas.width = 224;
@@ -733,26 +732,33 @@
         }
         initNSFWModel();
 
-        function calculateSkinRatio(ctx, width, height) {
+        // Проверяем распределение кожи с отсечением лиц и кистей (фокус на центр/низ кадра)
+        function calculateTargetSkinRatio(ctx, width, height) {
             const imgData = ctx.getImageData(0, 0, width, height);
             const data = imgData.data;
-            let skinPixels = 0;
-            let totalPixels = 0;
+            let centerSkinPixels = 0;
+            let totalCenterPixels = 0;
 
-            for (let i = 0; i < data.length; i += 16) {
-                const r = data[i];
-                const g = data[i + 1];
-                const b = data[i + 2];
+            // Сканируем преимущественно центральную и нижнюю часть кадра (торс), игнорируя верх (лицо)
+            const startY = Math.floor(height * 0.25); 
 
-                const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
-                const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
+            for (let y = startY; y < height; y += 4) {
+                for (let x = Math.floor(width * 0.15); x < Math.floor(width * 0.85); x += 4) {
+                    const i = (y * width + x) * 4;
+                    const r = data[i];
+                    const g = data[i + 1];
+                    const b = data[i + 2];
 
-                if (cb >= 77 && cb <= 127 && cr >= 133 && cr <= 173) {
-                    skinPixels++;
+                    const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
+                    const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
+
+                    if (cb >= 77 && cb <= 127 && cr >= 133 && cr <= 173) {
+                        centerSkinPixels++;
+                    }
+                    totalCenterPixels++;
                 }
-                totalPixels++;
             }
-            return skinPixels / totalPixels;
+            return centerSkinPixels / totalCenterPixels;
         }
 
         function startNSFWMonitoring() {
@@ -763,7 +769,7 @@
                 
                 try {
                     offCtx.drawImage(remoteVideo, 0, 0, 224, 224);
-                    const skinRatio = calculateSkinRatio(offCtx, 224, 224);
+                    const skinRatio = calculateTargetSkinRatio(offCtx, 224, 224);
 
                     let porn = 0, sexy = 0, hentai = 0;
                     if (nsfwModel) {
@@ -773,19 +779,18 @@
                         hentai = predictions.find(p => p.className === 'Hentai')?.probability || 0;
                     }
 
-                    // Условие обнаружения нарушения
-                    const violationDetected = (skinRatio > 0.28 || porn > 0.15 || sexy > 0.30 || hentai > 0.20);
+                    // Порог поднят до 42% по торсу, чтобы лицо, язык или руки крупным планом не триггерили блэкаут
+                    const violationDetected = (skinRatio > 0.42 || porn > 0.25 || sexy > 0.45 || hentai > 0.30);
 
                     if (violationDetected) {
                         if (!isBlackoutActive) {
                             isBlackoutActive = true;
-                            remoteVideo.style.display = 'none'; // Скрываем только видео, связь не рвем!
+                            remoteVideo.style.display = 'none';
                             remoteStatus.innerText = "🛑 СИГНАЛ СКРЫТ: NSFW Blackout";
                             remoteStatus.style.display = 'block';
                             showToast("Обнаружен запрещенный контент — видео скрыто.", "warning");
                         }
                     } else {
-                        // Если собеседник убрал нарушение — возвращаем видео обратно автоматически!
                         if (isBlackoutActive) {
                             isBlackoutActive = false;
                             remoteVideo.style.display = 'block';
