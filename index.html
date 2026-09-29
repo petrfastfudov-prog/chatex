@@ -322,13 +322,11 @@
         .network-warning span { font-size: 1.1rem; font-weight: bold; margin-bottom: 6px; }
         .network-warning small { color: var(--text-muted); font-size: 0.85rem; }
 
-        /* Оверлей блюра */
+        /* НАДЕЖНЫЙ ЧЕРНЫЙ ЭКРАН (ЗАМЕНА БЛЮРУ) */
         .nsfw-blur-overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(15, 23, 42, 0.4);
-            backdrop-filter: blur(25px);
-            -webkit-backdrop-filter: blur(25px);
+            background: #020617;
             display: none;
             flex-direction: column;
             align-items: center;
@@ -520,7 +518,7 @@
                 <h3>Правила адекватного общения и модерации</h3>
                 <p><b>1. Формат платформы:</b> Chatex создавался для интересного, живого и адекватного общения. Любые проявления вирта, похабщины и неадекватности здесь запрещены.</p>
                 <p><b>2. Строгий возрастное ограничение (18+):</b> Платформа предназначена только для совершеннолетних. Несовершеннолетние обязаны немедленно покинуть ресурс.</p>
-                <p><b>3. Автоматическая нейро-модерация (18+ Blur):</b> В систему встроен фоновый фильтр. При попытке демонстрации запрещенного или откровенного контента видео собеседника мгновенно размывается защитным фильтром.</p>
+                <p><b>3. Автоматическая нейро-модерация (18+ Blackout):</b> В систему встроен фоновый фильтр. При попытке демонстрации запрещенного или откровенного контента видео собеседника мгновенно скрывается черным экраном.</p>
                 <p><b>4. Запрет на ненадлежащий контент:</b> Строго запрещены попытки трансляции сексуального, экстремистского или шок-контента. Нарушители блокируются навсегда по IP.</p>
                 <p><b>5. Архитектура P2P:</b> Связь работает напрямую между устройствами (WebRTC). Разговоры не записываются и не сохраняются на центральных серверах.</p>
                 <p><b>6. Безопасность и анонимность:</b> Не передавайте личные данные, номер телефона или адрес проживания незнакомым людям в первых минутах разговора.</p>
@@ -558,7 +556,7 @@
                 <div class="video-window">
                     <canvas class="tv-noise-canvas" id="tvNoiseCanvas"></canvas>
                     <video id="remoteVideo" autoplay playsinline webkit-playsinline></video>
-                    <!-- Оверлей блюра -->
+                    <!-- Оверлей черного экрана -->
                     <div class="nsfw-blur-overlay" id="nsfwBlurOverlay">
                         <div class="badge-18">18+ ВНИМАНИЕ</div>
                         <p>Контент скрыт системой защиты</p>
@@ -727,7 +725,7 @@
         let currentFacingMode = 'user';
         let mediaInitialized = false;
 
-        // --- УЛУЧШЕННЫЙ И НАДЕЖНЫЙ NSFW ФИЛЬТР (ПК + МОБИЛЬНЫЕ) ---
+        // --- НАДЕЖНЫЙ NSFW ФИЛЬТР (С ЧЕРНЫМ ЭКРАНОМ) ---
         let nsfwModel = null;
         let nsfwInterval = null;
         let isBlurActive = false;
@@ -742,19 +740,14 @@
                 }
                 if (window.nsfwjs) {
                     nsfwModel = await nsfwjs.load();
-                    console.log("NSFWJS фильтр успешно загружен");
                 }
             } catch (e) {
-                console.warn("Ошибка WebGL для NSFWJS, переключение на CPU...", e);
                 try {
                     if (typeof tf !== 'undefined') {
                         await tf.setBackend('cpu');
                         nsfwModel = await nsfwjs.load();
-                        console.log("NSFWJS загружен в CPU режиме");
                     }
-                } catch (err) {
-                    console.error("Не удалось загрузить нейросеть фильтра:", err);
-                }
+                } catch (err) {}
             }
         }
         initNSFWModel();
@@ -766,14 +759,12 @@
             isClassifying = false;
             
             nsfwInterval = setInterval(async () => {
-                // Проверяем статус видеопотока и нейросети
                 if (!remoteVideo || remoteVideo.paused || remoteVideo.ended || remoteVideo.readyState < 2 || !nsfwModel || isClassifying) {
                     return;
                 }
                 
                 isClassifying = true;
                 try {
-                    // Классифицируем прямо элемент <video>, сохраняя пропорции кадра
                     const predictions = await nsfwModel.classify(remoteVideo);
                     
                     let porn = 0, sexy = 0, hentai = 0;
@@ -783,21 +774,19 @@
                         if (predictions[i].className === 'Hentai') hentai = predictions[i].probability;
                     }
 
-                    // Оптимальные пороги: обнаженный торс дает высокое значение Sexy/Porn
+                    // Пороги срабатывания для обнаженного торса / откровенного контента
                     const violationDetected = (porn > 0.30 || sexy > 0.45 || hentai > 0.35);
 
                     if (violationDetected) {
                         consecutiveViolations++;
                         cleanFrames = 0;
                         
-                        // Требуется 2 кадра подряд с повышением вероятности, чтобы исключить ложный выбор на фоны/тени
                         if (consecutiveViolations >= 2 && !isBlurActive) {
                             isBlurActive = true;
                             nsfwBlurOverlay.style.display = 'flex';
                         }
                     } else {
                         cleanFrames++;
-                        // Снимаем блюр после 4 нормальных кадров
                         if (cleanFrames >= 4 && isBlurActive) {
                             consecutiveViolations = 0;
                             isBlurActive = false;
@@ -805,11 +794,10 @@
                         }
                     }
                 } catch (e) {
-                    console.error("Ошибка при проверке кадра:", e);
                 } finally {
                     isClassifying = false;
                 }
-            }, 500); // Проверка 2 раза в секунду
+            }, 500);
         }
 
         function stopNSFWMonitoring() {
