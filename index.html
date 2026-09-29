@@ -712,13 +712,16 @@
         let isMuted = false;
         let currentFacingMode = 'user';
 
+        // Расширенная конфигурация STUN/TURN с поддержкой TCP для 4G сетей
         const configuration = { 
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
                 { urls: 'stun:stun.cloudflare.com:3478' },
                 { urls: 'turn:openrelay.metered.ca:80', username: 'openrelay', credential: 'openrelay' },
-                { urls: 'turn:openrelay.metered.ca:443', username: 'openrelay', credential: 'openrelay' }
+                { urls: 'turn:openrelay.metered.ca:443', username: 'openrelay', credential: 'openrelay' },
+                { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelay', credential: 'openrelay' }
             ] 
         };
 
@@ -798,14 +801,13 @@
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: currentFacingMode },
-                    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } // Улучшенный звук
+                    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
                 });
                 localStream = stream;
                 localVideo.srcObject = localStream;
                 localVideo.style.display = 'block';
                 localStatus.style.display = 'none';
             } catch (err) {
-                // ИСПРАВЛЕНИЕ ДЛЯ ПК БЕЗ КАМЕРЫ (Звук будет работать 100%)
                 try {
                     const audioStream = await navigator.mediaDevices.getUserMedia({ 
                         video: false, 
@@ -859,8 +861,17 @@
 
         function createPeerConnection() {
             peerConnection = new RTCPeerConnection(configuration);
+
+            // КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ ДЛЯ ПК БЕЗ ВЕБ-КАМЕРЫ:
+            // Принудительно запрашиваем прием видео (recvonly), даже если у локального ПК нет видеокамеры.
             if (localStream) {
                 localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+                if (localStream.getVideoTracks().length === 0) {
+                    peerConnection.addTransceiver('video', { direction: 'recvonly' });
+                }
+                if (localStream.getAudioTracks().length === 0) {
+                    peerConnection.addTransceiver('audio', { direction: 'recvonly' });
+                }
             } else {
                 peerConnection.addTransceiver('video', { direction: 'recvonly' });
                 peerConnection.addTransceiver('audio', { direction: 'recvonly' });
@@ -880,27 +891,23 @@
             };
 
             peerConnection.ontrack = event => {
-                if (event.streams && event.streams[0]) {
-                    stopTVNoise();
-                    
-                    if (remoteVideo.srcObject !== event.streams[0]) {
-                        remoteVideo.srcObject = event.streams[0];
-                    }
-                    
-                    remoteVideo.style.display = 'block';
-                    remoteStatus.style.display = 'none';
+                stopTVNoise();
+                
+                // Гарантируем корректное формирование MediaStream для всех типов браузеров
+                let stream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
+                
+                remoteVideo.srcObject = stream;
+                remoteVideo.style.display = 'block';
+                remoteStatus.style.display = 'none';
 
-                    // ГЛАВНОЕ ИСПРАВЛЕНИЕ: Форсируем включение звука для собеседника
-                    remoteVideo.muted = false;
-                    remoteVideo.volume = 1.0;
+                remoteVideo.muted = false;
+                remoteVideo.volume = 1.0;
 
-                    const playPromise = remoteVideo.play();
-                    if (playPromise !== undefined) {
-                        playPromise.catch((e) => { 
-                            console.warn("Autoplay block:", e);
-                            // Мы убрали отсюда .muted = true, из-за которого пропадал звук
-                        });
-                    }
+                const playPromise = remoteVideo.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch((e) => { 
+                        console.warn("Autoplay block:", e);
+                    });
                 }
             };
 
