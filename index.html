@@ -291,11 +291,13 @@
         .network-warning span { font-size: 1.1rem; font-weight: bold; margin-bottom: 6px; }
         .network-warning small { color: var(--text-muted); font-size: 0.85rem; }
 
-        /* ОВЕРЛЕЙ БЛОКИРОВКИ */
+        /* ОВЕРЛЕЙ БЛОКИРОВКИ (БЛЮР + ЗАТЕМНЕНИЕ) */
         .nsfw-blur-overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: #020617;
+            background: rgba(2, 6, 23, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             display: none;
             flex-direction: column;
             align-items: center;
@@ -316,6 +318,21 @@
             box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);
         }
         .nsfw-blur-overlay p { font-size: 0.95rem; color: #cbd5e1; }
+
+        /* Индикатор работы фильтра (отладка) */
+        #aiStatusBadge {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 6;
+            background: rgba(0, 0, 0, 0.6);
+            color: #22c55e;
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            border-radius: 6px;
+            display: none;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
 
         .control-buttons {
             display: flex;
@@ -490,7 +507,7 @@
                 <p><b>6. Безопасность и анонимность:</b> Не передавайте личные данные, номер телефона или адрес проживания незнакомым людям в первых минутах разговора.</p>
                 <p><b>7. Взаимное уважение:</b> Запрещены оскорбления, травля, угроз и спам. Нарушение ведет к немедленному бану.</p>
                 <p><b>8. Мгновенный сброс:</b> Если собеседник вам неприятен — нажимайте «ДАЛЕЕ». Не тратьте время на негативные эмоции.</p>
-                <p><b>9. Отказ от ответственности:</b> Администрация не отвечает за высказывания участников, но пресекает нарушения умными фильтрами.</p>
+                <p><b>9. Отказ от ответственности:</b> Администрация не отвечает за высказывания участников, но пресекает нарушения умными умными фильтрами.</p>
                 <p><b>10. Акцепт условий:</b> Нажимая кнопку входа, вы подтверждаете совершеннолетие и принимаете полную ответственность за соблюдение правил.</p>
             </div>
 
@@ -520,9 +537,10 @@
         <div class="left-column">
             <div class="videos-container">
                 <div class="video-window">
+                    <div id="aiStatusBadge">🛡️ AI Фильтр активен</div>
                     <canvas class="tv-noise-canvas" id="tvNoiseCanvas"></canvas>
                     <video id="remoteVideo" autoplay playsinline webkit-playsinline></video>
-                    <!-- Оверлей черного экрана -->
+                    <!-- Оверлей блёра -->
                     <div class="nsfw-blur-overlay" id="nsfwBlurOverlay">
                         <div class="badge-18">18+ ВНИМАНИЕ</div>
                         <p>Контент скрыт системой защиты</p>
@@ -563,6 +581,9 @@
             </div>
         </div>
     </div>
+
+    <!-- Скрытый холст для захвата кадров в нейросеть -->
+    <canvas id="snapshotCanvas" width="224" height="224" style="display:none;"></canvas>
 
     <script>
         // Пасхалка
@@ -667,6 +688,7 @@
         const remoteStatus = document.getElementById('remoteStatus');
         const networkWarning = document.getElementById('networkWarning');
         const nsfwBlurOverlay = document.getElementById('nsfwBlurOverlay');
+        const aiStatusBadge = document.getElementById('aiStatusBadge');
         const muteBtn = document.getElementById('muteBtn');
         const flipBtn = document.getElementById('flipBtn');
         const nextBtn = document.getElementById('nextBtn');
@@ -674,6 +696,9 @@
         const chatBody = document.getElementById('chatBody');
         const chatInput = document.getElementById('chatInput');
         const sendBtn = document.getElementById('sendBtn');
+        
+        const snapshotCanvas = document.getElementById('snapshotCanvas');
+        const snapshotCtx = snapshotCanvas.getContext('2d');
 
         let localStream = null;
         let peerConnection = null;
@@ -683,29 +708,45 @@
         let currentFacingMode = 'user';
         let mediaInitialized = false;
 
-        // --- ВОССТАНОВЛЕННЫЙ РАБОЧИЙ NSFW ФИЛЬТР ---
+        // --- УЛУЧШЕННАЯ И НАДЕЖНАЯ РАБОТА NSFW ФИЛЬТРА ---
         let model = null;
         let moderationInterval = null;
+        let isChecking = false;
 
         async function loadNSFWModel() {
             try {
-                model = await nsfwjs.load();
-                console.log("NSFW model loaded successfully");
+                if (typeof nsfwjs !== 'undefined') {
+                    // Используем бэкенд WebGL для максимальной скорости классификации кадров
+                    await tf.setBackend('webgl');
+                    await tf.ready();
+                    model = await nsfwjs.load();
+                    console.log("NSFW model loaded successfully with WebGL backend");
+                    aiStatusBadge.style.display = 'block';
+                }
             } catch (err) {
-                console.error("Failed to load NSFW model:", err);
+                console.warn("NSFW model failed to load:", err);
             }
         }
         loadNSFWModel();
 
         function startNSFWCheck() {
             if (moderationInterval) clearInterval(moderationInterval);
+            if (!model) return;
             
             moderationInterval = setInterval(async () => {
-                if (!model || !remoteVideo || remoteVideo.paused || remoteVideo.ended || remoteVideo.readyState < 2) {
+                // Проверяем, что видео реально воспроизводится
+                if (!model || !remoteVideo || remoteVideo.paused || remoteVideo.ended || remoteVideo.readyState < 2 || isChecking) {
                     return;
                 }
+
+                isChecking = true;
                 try {
-                    const predictions = await model.classify(remoteVideo);
+                    // Рисуем текущий кадр видео на скрытый холм 224x224 (стандарт для моделей классификации)
+                    snapshotCtx.drawImage(remoteVideo, 0, 0, 224, 224);
+
+                    // Классифицируем изображение прямо с HTMLCanvasElement (это обходит любые ограничения кросс-доменности видео)
+                    const predictions = await model.classify(snapshotCanvas);
+                    
                     let pornProb = 0;
                     let sexyProb = 0;
                     let hentaiProb = 0;
@@ -716,16 +757,18 @@
                         if (p.className === 'Hentai') hentaiProb = p.probability;
                     });
 
-                    // Чувствительные пороги для мгновенного перекрытия
-                    if (pornProb > 0.15 || sexyProb > 0.3 || hentaiProb > 0.15) {
+                    // Пороги: снижены для мгновенной реакции при смене одежды/показе тела
+                    if (pornProb > 0.12 || sexyProb > 0.25 || hentaiProb > 0.12) {
                         nsfwBlurOverlay.style.display = 'flex';
                     } else {
                         nsfwBlurOverlay.style.display = 'none';
                     }
                 } catch (e) {
-                    // Ошибки классификации кадров игнорируем, чтобы не ломать цикл
+                    console.error("NSFW check error:", e);
+                } finally {
+                    isChecking = false;
                 }
-            }, 400);
+            }, 300); // Проверяем каждые 300мс для максимальной отзывчивости
         }
 
         function stopNSFWCheck() {
