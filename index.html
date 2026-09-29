@@ -705,7 +705,7 @@
         let currentFacingMode = 'user';
         let mediaInitialized = false;
 
-        // --- ГИБРИДНЫЙ ФИЛЬТР: NSFWJS + АНАЛИЗ ОГОЛЕННОГО ТОРСА ПО КОЖЕ ---
+        // --- ГИБРИДНЫЙ ФИЛЬТР: NSFWJS + АНАЛИЗ ОГОЛЕННОГО ТОРСА (НИЖНЯЯ ЧАСТЬ КАДРА) ---
         let model = null;
         let moderationInterval = null;
         let isChecking = false;
@@ -719,16 +719,14 @@
                     aiStatusBadge.style.display = 'block';
                 }
             } catch (err) {
-                console.warn("NSFW model failed to load, running skin-detection fallback:", err);
                 aiStatusBadge.style.display = 'block';
             }
         }
         loadNSFWModel();
 
-        // Функция проверки пикселей кожи в нижней/центральной части кадра (где обычно торс)
+        // Проверяем ТОЛЬКО нижнюю половину кадра (исключая лицо и шею)
         function checkSkinTone(ctx, width, height) {
-            // Берем область кадра, где обычно располагается туловище (нижняя половина кадра)
-            const startY = Math.floor(height * 0.3);
+            const startY = Math.floor(height * 0.55); // Проверка с 55% высоты и ниже
             const imgData = ctx.getImageData(0, startY, width, height - startY);
             const data = imgData.data;
             let skinPixels = 0;
@@ -739,8 +737,6 @@
                 const g = data[i + 1];
                 const b = data[i + 2];
 
-                // Упрощенный, но эффективный цветовой диапазон человеческой кожи в RGB
-                // (учитывает разные оттенки кожи при разном освещении веб-камеры)
                 const isSkin = (
                     r > 95 && g > 40 && b > 20 &&
                     Math.max(r, g, b) - Math.min(r, g, b) > 15 &&
@@ -753,8 +749,7 @@
                 }
             }
 
-            // Если доля пикселей кожи в зоне торса превышает 30% — считаем, что человек без футболки
-            return (skinPixels / totalPixels) > 0.30;
+            return (skinPixels / totalPixels) > 0.40; // Порог 40% для зоны торса
         }
 
         function startNSFWCheck() {
@@ -767,17 +762,16 @@
 
                 isChecking = true;
                 try {
-                    // Рисуем кадр на маленький скрытый холст
                     snapshotCtx.drawImage(remoteVideo, 0, 0, 160, 120);
 
                     let blockTriggered = false;
 
-                    // 1. Проверка на оголенный торс по анализу цвета кожи в зоне тела
+                    // 1. Проверка по коже в зоне торса
                     if (checkSkinTone(snapshotCtx, 160, 120)) {
                         blockTriggered = true;
                     }
 
-                    // 2. Если загружена модель nsfwjs, проверяем её тоже (на случай откровенного контента)
+                    // 2. Проверка через NSFWJS
                     if (model) {
                         const predictions = await model.classify(snapshotCanvas);
                         predictions.forEach(p => {
@@ -798,7 +792,7 @@
                 } finally {
                     isChecking = false;
                 }
-            }, 250); // Проверка 4 раза в секунду для мгновенной реакции
+            }, 250);
         }
 
         function stopNSFWCheck() {
