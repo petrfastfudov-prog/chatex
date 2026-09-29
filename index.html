@@ -280,7 +280,6 @@
             overflow: hidden;
         }
 
-        /* ЖЕСТКИЙ СБРОС ЗЕРКАЛИРОВАНИЯ ДЛЯ ВСЕХ ВИДЕО ТЕГОВ */
         video, #localVideo, #remoteVideo {
             width: 100%;
             height: 100%;
@@ -323,7 +322,7 @@
         .network-warning span { font-size: 1.1rem; font-weight: bold; margin-bottom: 6px; }
         .network-warning small { color: var(--text-muted); font-size: 0.85rem; }
 
-        /* Стильный оверлей блюра и предупреждения 18+ */
+        /* Стильный оверлей блюра */
         .nsfw-blur-overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -602,15 +601,18 @@
     </div>
 
     <script>
-        // --- ПАСХАЛКА: 5 КЛИКОВ НА НАЗВАНИЕ ---
+        // --- ОБНОВЛЕННАЯ ПАСХАЛКА: 5 КЛИКОВ ПОКАЗАТЬ, ЕЩЕ 5 - СКРЫТЬ ---
         const brandTitle = document.getElementById('brandTitle');
         const creatorTag = document.getElementById('creator-tag');
         let clickCount = 0;
+        let isCreatorTagVisible = false;
 
         brandTitle.addEventListener('click', () => {
             clickCount++;
             if (clickCount >= 5) {
-                creatorTag.style.display = 'inline-block';
+                isCreatorTagVisible = !isCreatorTagVisible;
+                creatorTag.style.display = isCreatorTagVisible ? 'inline-block' : 'none';
+                clickCount = 0; // Сбрасываем счетчик после переключения
             }
         });
 
@@ -725,11 +727,12 @@
         let currentFacingMode = 'user';
         let mediaInitialized = false;
 
-        // --- УЛУЧШЕННЫЙ NSFW ФИЛЬТР (УМЕНЬШЕНЫ ПОРОГИ ДЛЯ ЧУВСТВИТЕЛЬНОСТИ) ---
+        // --- ЖЕСТКИЙ NSFW ФИЛЬТР: ЛОВИТ ДАЖЕ ГОЛЫЙ ТОРС ---
         let nsfwModel = null;
         let nsfwInterval = null;
         let isBlurActive = false;
         let consecutiveViolations = 0;
+        let cleanFrames = 0;
 
         const offCanvas = document.createElement('canvas');
         offCanvas.width = 224;
@@ -748,7 +751,9 @@
         function startNSFWMonitoring() {
             if (nsfwInterval) clearInterval(nsfwInterval);
             consecutiveViolations = 0;
+            cleanFrames = 0;
             
+            // Интервал уменьшен до 800мс для более быстрой реакции
             nsfwInterval = setInterval(async () => {
                 if (!remoteVideo || remoteVideo.paused || remoteVideo.readyState < 2 || !nsfwModel) return;
                 
@@ -760,24 +765,29 @@
                     const sexy = predictions.find(p => p.className === 'Sexy')?.probability || 0;
                     const hentai = predictions.find(p => p.className === 'Hentai')?.probability || 0;
 
-                    // Установлены более чувствительные пороги для точного перехвата обнаженного торса/нюд-контента
-                    const violationDetected = (porn > 0.40 || hentai > 0.35 || sexy > 0.50);
+                    // Экстремально низкие пороги: срабатывает на любой намек на оголение тела (торс, декольте)
+                    const violationDetected = (porn > 0.15 || hentai > 0.20 || sexy > 0.20);
 
                     if (violationDetected) {
                         consecutiveViolations++;
-                        if (consecutiveViolations >= 2 && !isBlurActive) {
+                        cleanFrames = 0; // Сбрасываем чистые кадры
+                        
+                        // СРАБАТЫВАЕТ МОМЕНТАЛЬНО НА 1-м ЖЕ КАДРЕ
+                        if (consecutiveViolations >= 1 && !isBlurActive) {
                             isBlurActive = true;
                             nsfwBlurOverlay.style.display = 'flex';
                         }
                     } else {
-                        consecutiveViolations = 0;
-                        if (isBlurActive) {
+                        cleanFrames++;
+                        // Снимает блюр ТОЛЬКО если 3 кадра подряд (около 2.5 секунд) картинка "чистая"
+                        if (cleanFrames >= 3 && isBlurActive) {
+                            consecutiveViolations = 0;
                             isBlurActive = false;
                             nsfwBlurOverlay.style.display = 'none';
                         }
                     }
                 } catch (e) {}
-            }, 1000);
+            }, 800);
         }
 
         function stopNSFWMonitoring() {
@@ -787,10 +797,10 @@
             }
             isBlurActive = false;
             consecutiveViolations = 0;
+            cleanFrames = 0;
             nsfwBlurOverlay.style.display = 'none';
         }
 
-        // --- TURN/STUN КОНФИГУРАЦИЯ ДЛЯ СВЯЗИ МОБИЛЬНЫЙ ИНТЕРНЕТ ↔ WI-FI ---
         const configuration = { 
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
@@ -931,7 +941,6 @@
             if (localStream) {
                 localStream.getTracks().forEach(track => {
                     const sender = peerConnection.addTrack(track, localStream);
-                    // Устанавливаем contentHint для адаптации видеопотока под мобильные сети и предотвращения черных экранов
                     if (track.kind === 'video' && 'contentHint' in sender) {
                         sender.contentHint = 'motion';
                     }
@@ -954,7 +963,6 @@
                 }
             };
 
-            // Автоматическое восстановление соединения (IceRestart) при кратковременных обрывах сотовой связи
             let isRestarting = false;
             peerConnection.onconnectionstatechange = async () => {
                 if (!peerConnection) return;
