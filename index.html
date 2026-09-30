@@ -317,20 +317,6 @@
         }
         .nsfw-blur-overlay p { font-size: 0.95rem; color: #cbd5e1; }
 
-        #aiStatusBadge {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            z-index: 6;
-            background: rgba(0, 0, 0, 0.6);
-            color: #22c55e;
-            font-size: 0.75rem;
-            padding: 4px 8px;
-            border-radius: 6px;
-            display: none;
-            border: 1px solid rgba(34, 197, 94, 0.3);
-        }
-
         .control-buttons {
             display: flex;
             gap: 10px;
@@ -350,11 +336,17 @@
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         }
 
-        .btn:active { transform: translateY(1px); }
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .btn:active:not(:disabled) { transform: translateY(1px); }
         .btn-start { background: var(--accent-green); }
-        .btn-start:hover { background: #16a34a; }
+        .btn-start:hover:not(:disabled) { background: #16a34a; }
         .btn-stop { background: var(--accent-red); }
-        .btn-stop:hover { background: #dc2626; }
+        .btn-stop:hover:not(:disabled) { background: #dc2626; }
 
         .btn-icon {
             flex: 0 0 52px;
@@ -534,7 +526,6 @@
         <div class="left-column">
             <div class="videos-container">
                 <div class="video-window">
-                    <div id="aiStatusBadge">🛡️ Анти-Торс Фильтр активен</div>
                     <canvas class="tv-noise-canvas" id="tvNoiseCanvas"></canvas>
                     <video id="remoteVideo" autoplay playsinline webkit-playsinline></video>
                     <!-- Оверлей блокировки -->
@@ -572,7 +563,7 @@
 
             <div class="chat-footer">
                 <div class="input-wrapper">
-                    <input type="text" class="chat-input" id="chatInput" placeholder="Введите сообщение...">
+                    <input type="text" class="chat-input" id="chatInput" placeholder="Введите сообщение..." maxlength="500">
                     <button class="send-btn" id="sendBtn">Отправить</button>
                 </div>
             </div>
@@ -608,11 +599,7 @@
         let hasScrolledToBottom = false;
 
         function checkAcceptance() {
-            if (hasScrolledToBottom && ageCheckbox.checked) {
-                acceptBtn.disabled = false;
-            } else {
-                acceptBtn.disabled = true;
-            }
+            acceptBtn.disabled = !(hasScrolledToBottom && ageCheckbox.checked);
         }
 
         rulesBox.addEventListener('scroll', () => {
@@ -685,7 +672,6 @@
         const remoteStatus = document.getElementById('remoteStatus');
         const networkWarning = document.getElementById('networkWarning');
         const nsfwBlurOverlay = document.getElementById('nsfwBlurOverlay');
-        const aiStatusBadge = document.getElementById('aiStatusBadge');
         const muteBtn = document.getElementById('muteBtn');
         const flipBtn = document.getElementById('flipBtn');
         const nextBtn = document.getElementById('nextBtn');
@@ -705,7 +691,7 @@
         let currentFacingMode = 'user';
         let mediaInitialized = false;
 
-        // --- ГИБРИДНЫЙ ФИЛЬТР: NSFWJS + АНАЛИЗ ОГОЛЕННОГО ТОРСА (НИЖНЯЯ ЧАСТЬ КАДРА) ---
+        // ФИЛЬТР NSFWJS
         let model = null;
         let moderationInterval = null;
         let isChecking = false;
@@ -716,17 +702,13 @@
                     await tf.setBackend('webgl');
                     await tf.ready();
                     model = await nsfwjs.load();
-                    aiStatusBadge.style.display = 'block';
                 }
-            } catch (err) {
-                aiStatusBadge.style.display = 'block';
-            }
+            } catch (err) {}
         }
         loadNSFWModel();
 
-        // Проверяем ТОЛЬКО нижнюю половину кадра (исключая лицо и шею)
         function checkSkinTone(ctx, width, height) {
-            const startY = Math.floor(height * 0.55); // Проверка с 55% высоты и ниже
+            const startY = Math.floor(height * 0.55);
             const imgData = ctx.getImageData(0, startY, width, height - startY);
             const data = imgData.data;
             let skinPixels = 0;
@@ -744,12 +726,10 @@
                     r > g && r > b
                 );
 
-                if (isSkin) {
-                    skinPixels++;
-                }
+                if (isSkin) skinPixels++;
             }
 
-            return (skinPixels / totalPixels) > 0.40; // Порог 40% для зоны торса
+            return (skinPixels / totalPixels) > 0.40;
         }
 
         function startNSFWCheck() {
@@ -763,15 +743,12 @@
                 isChecking = true;
                 try {
                     snapshotCtx.drawImage(remoteVideo, 0, 0, 160, 120);
-
                     let blockTriggered = false;
 
-                    // 1. Проверка по коже в зоне торса
                     if (checkSkinTone(snapshotCtx, 160, 120)) {
                         blockTriggered = true;
                     }
 
-                    // 2. Проверка через NSFWJS
                     if (model) {
                         const predictions = await model.classify(snapshotCanvas);
                         predictions.forEach(p => {
@@ -783,11 +760,7 @@
                         });
                     }
 
-                    if (blockTriggered) {
-                        nsfwBlurOverlay.style.display = 'flex';
-                    } else {
-                        nsfwBlurOverlay.style.display = 'none';
-                    }
+                    nsfwBlurOverlay.style.display = blockTriggered ? 'flex' : 'none';
                 } catch (e) {
                 } finally {
                     isChecking = false;
@@ -869,7 +842,7 @@
                     } else if (data.type === 'chat_message') {
                         const msg = document.createElement('div');
                         msg.className = 'msg-text';
-                        msg.innerHTML = `<strong>Собеседник:</strong> ${data.text}`;
+                        msg.innerHTML = `<strong>Собеседник:</strong> ${escapeHtml(data.text)}`;
                         chatBody.appendChild(msg);
                         chatBody.scrollTop = chatBody.scrollHeight;
                     } else if (data.type === 'peer_disconnected') {
@@ -895,11 +868,7 @@
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: currentFacingMode },
-                    audio: { 
-                        echoCancellation: true, 
-                        noiseSuppression: true, 
-                        autoGainControl: true 
-                    }
+                    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
                 });
                 localStream = stream;
                 
@@ -1016,7 +985,30 @@
             chatBody.scrollTop = chatBody.scrollHeight;
         }
 
+        function escapeHtml(str) {
+            return str.replace(/[&<>"']/g, function(m) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m];
+            });
+        }
+
+        // ЗАЩИТА ОТ КЛИК-СПАМА (RATE LIMIT ON BUTTONS)
+        let isActionCooldown = false;
+
+        function triggerCooldown(duration = 1200) {
+            isActionCooldown = true;
+            nextBtn.disabled = true;
+            stopBtn.disabled = true;
+            setTimeout(() => {
+                isActionCooldown = false;
+                nextBtn.disabled = false;
+                stopBtn.disabled = false;
+            }, duration);
+        }
+
         nextBtn.addEventListener('click', async () => {
+            if (isActionCooldown) return;
+            triggerCooldown();
+
             if (!mediaInitialized) {
                 await initMedia();
             }
@@ -1032,6 +1024,9 @@
         });
 
         stopBtn.addEventListener('click', () => {
+            if (isActionCooldown) return;
+            triggerCooldown();
+
             cleanupPeerConnection();
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'stop_search' }));
@@ -1067,15 +1062,25 @@
             }
         });
 
+        // ЗАЩИТА ОТ СПАМА В ЧАТЕ
+        let lastMsgTime = 0;
+
         function sendChatMessage() {
-            const text = chatInput.value.trim();
+            const now = Date.now();
+            if (now - lastMsgTime < 400) return; // Не чаще 1 сообщения в 0.4 сек
+
+            const text = chatInput.value.trim().substring(0, 500);
             if (!text) return;
+            
+            lastMsgTime = now;
+
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'chat_message', text: text }));
             }
+
             const msg = document.createElement('div');
             msg.className = 'msg-text';
-            msg.innerHTML = `<strong>Вы:</strong> ${text}`;
+            msg.innerHTML = `<strong>Вы:</strong> ${escapeHtml(text)}`;
             chatBody.appendChild(msg);
             chatBody.scrollTop = chatBody.scrollHeight;
             chatInput.value = '';
@@ -1084,6 +1089,15 @@
         sendBtn.addEventListener('click', sendChatMessage);
         chatInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') sendChatMessage();
+        });
+
+        // БЕСШОВНАЯ ОЧИСТКА ПРИ ЗАКРЫТИИ ВКЛАДКИ
+        window.addEventListener('beforeunload', () => {
+            cleanupPeerConnection();
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'stop_search' }));
+                ws.close();
+            }
         });
     </script>
 </body>
