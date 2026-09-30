@@ -252,13 +252,18 @@
         video, #localVideo, #remoteVideo {
             width: 100%;
             height: 100%;
-            object-fit: cover;
+            object-fit: contain; /* Изменено: теперь кадр влезает на 100% без обрезки краев */
+            background-color: #000; /* Черные полосы по краям (леттербоксинг) вместо обрезки */
             display: none;
             position: absolute;
             top: 0; left: 0;
             z-index: 1;
-            transform: none !important;
-            -webkit-transform: none !important;
+        }
+
+        /* Класс для эффекта зеркала */
+        .mirrored {
+            transform: scaleX(-1) !important;
+            -webkit-transform: scaleX(-1) !important;
         }
 
         .tv-noise-canvas {
@@ -597,7 +602,6 @@
 
         let hasScrolledToBottom = false;
 
-        // ПРОВЕРКА СОХРАНЕННОГО СОГЛАСИЯ С ПРАВИЛАМИ (ПРИ F5)
         if (localStorage.getItem('chatex_rules_accepted') === 'true') {
             welcomeOverlay.style.display = 'none';
             mainWrapper.style.display = 'flex';
@@ -886,6 +890,13 @@
                 
                 if (isMuted) {
                     localStream.getAudioTracks().forEach(t => t.enabled = false);
+                }
+
+                // ЛОГИКА ЗЕРКАЛА ДЛЯ ФРОНТАЛКИ
+                if (currentFacingMode === 'user') {
+                    localVideo.classList.add('mirrored');
+                } else {
+                    localVideo.classList.remove('mirrored');
                 }
 
                 localVideo.srcObject = localStream;
