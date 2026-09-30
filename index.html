@@ -291,7 +291,6 @@
         .network-warning span { font-size: 1.1rem; font-weight: bold; margin-bottom: 6px; }
         .network-warning small { color: var(--text-muted); font-size: 0.85rem; }
 
-        /* ИСПРАВЛЕННЫЙ ОВЕРЛЕЙ ПРЕДУПРЕЖДЕНИЯ (БЕЗ СКАПРИЗНОГО ТЕКСТА) */
         .nsfw-blur-overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -530,7 +529,6 @@
                     <canvas class="tv-noise-canvas" id="tvNoiseCanvas"></canvas>
                     <video id="remoteVideo" autoplay playsinline webkit-playsinline></video>
                     
-                    <!-- Обновленный мягкий оверлей предупреждения -->
                     <div class="nsfw-blur-overlay" id="nsfwBlurOverlay">
                         <div class="badge-18">18+ ВНИМАНИЕ</div>
                         <p id="nsfwText">Пожалуйста, соблюдайте правила общения</p>
@@ -573,11 +571,9 @@
         </div>
     </div>
 
-    <!-- Скрытый холст для анализа кадров -->
     <canvas id="snapshotCanvas" width="160" height="120" style="display:none;"></canvas>
 
     <script>
-        // Пасхалка
         const brandTitle = document.getElementById('brandTitle');
         const creatorTag = document.getElementById('creator-tag');
         let clickCount = 0;
@@ -601,6 +597,12 @@
 
         let hasScrolledToBottom = false;
 
+        // ПРОВЕРКА СОХРАНЕННОГО СОГЛАСИЯ С ПРАВИЛАМИ (ПРИ F5)
+        if (localStorage.getItem('chatex_rules_accepted') === 'true') {
+            welcomeOverlay.style.display = 'none';
+            mainWrapper.style.display = 'flex';
+        }
+
         function checkAcceptance() {
             acceptBtn.disabled = !(hasScrolledToBottom && ageCheckbox.checked);
         }
@@ -622,6 +624,7 @@
         ageCheckbox.addEventListener('change', checkAcceptance);
 
         acceptBtn.addEventListener('click', () => {
+            localStorage.setItem('chatex_rules_accepted', 'true');
             welcomeOverlay.style.display = 'none';
             mainWrapper.style.display = 'flex';
         });
@@ -694,7 +697,6 @@
         let currentFacingMode = 'user';
         let mediaInitialized = false;
 
-        // ФИЛЬТР NSFWJS
         let model = null;
         let moderationInterval = null;
         let isChecking = false;
@@ -799,7 +801,6 @@
             ws = new WebSocket(protocol + location.host);
             
             ws.onopen = () => {
-                // Если сессия была активной до перезагрузки, запускаем поиск автоматически
                 if (sessionStorage.getItem('chatex_active_session') === 'true') {
                     addSystemMsg("Восстановление соединения...");
                     setTimeout(() => { triggerSearch(); }, 300);
@@ -1002,7 +1003,6 @@
             });
         }
 
-        // ЗАЩИТА ОТ КЛИК-СПАМА
         let isActionCooldown = false;
 
         function triggerCooldown(duration = 1200) {
@@ -1080,7 +1080,6 @@
             }
         });
 
-        // ЗАЩИТА ОТ СПАМА В ЧАТЕ
         let lastMsgTime = 0;
 
         function sendChatMessage() {
@@ -1109,7 +1108,6 @@
             if (e.key === 'Enter') sendChatMessage();
         });
 
-        // ВОССТАНОВЛЕНИЕ СВЯЗИ ПОСЛЕ ВХОДЯЩЕГО ЗВОНКА ИЛИ СВОРАЧИВАНИЯ ВКЛАДКИ
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') {
                 const isSessionActive = sessionStorage.getItem('chatex_active_session') === 'true';
@@ -1123,7 +1121,6 @@
             }
         });
 
-        // БЕСШОВНАЯ ОЧИСТКА ПРИ ЗАКРЫТИИ ВКЛАДКИ
         window.addEventListener('beforeunload', () => {
             cleanupPeerConnection();
             if (ws && ws.readyState === WebSocket.OPEN) {
