@@ -252,15 +252,14 @@
         video, #localVideo, #remoteVideo {
             width: 100%;
             height: 100%;
-            object-fit: contain; /* Изменено: теперь кадр влезает на 100% без обрезки краев */
-            background-color: #000; /* Черные полосы по краям (леттербоксинг) вместо обрезки */
+            object-fit: cover;
             display: none;
             position: absolute;
             top: 0; left: 0;
             z-index: 1;
         }
 
-        /* Класс для эффекта зеркала */
+        /* Класс для эффекта зеркала фронталки */
         .mirrored {
             transform: scaleX(-1) !important;
             -webkit-transform: scaleX(-1) !important;
@@ -785,16 +784,34 @@
             nsfwBlurOverlay.style.display = 'none';
         }
 
+        const iceServers = [
+            {
+                urls: "stun:stun.relay.metered.ca:80",
+            },
+            {
+                urls: "turn:global.relay.metered.ca:80",
+                username: "c886bcfb040d10544fdc8ae9",
+                credential: "DKXL6S2vHcBg0Nfx",
+            },
+            {
+                urls: "turn:global.relay.metered.ca:80?transport=tcp",
+                username: "c886bcfb040d10544fdc8ae9",
+                credential: "DKXL6S2vHcBg0Nfx",
+            },
+            {
+                urls: "turn:global.relay.metered.ca:443",
+                username: "c886bcfb040d10544fdc8ae9",
+                credential: "DKXL6S2vHcBg0Nfx",
+            },
+            {
+                urls: "turns:global.relay.metered.ca:443?transport=tcp",
+                username: "c886bcfb040d10544fdc8ae9",
+                credential: "DKXL6S2vHcBg0Nfx",
+            },
+        ];
+
         const configuration = { 
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' },
-                { urls: 'stun:stun.cloudflare.com:3478' },
-                { urls: 'turn:openrelay.metered.ca:80', username: 'openrelay', credential: 'openrelay' },
-                { urls: 'turn:openrelay.metered.ca:443', username: 'openrelay', credential: 'openrelay' },
-                { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelay', credential: 'openrelay' }
-            ],
+            iceServers: iceServers,
             iceCandidatePoolSize: 10
         };
 
@@ -850,83 +867,65 @@
                             await processIceQueue();
                         }
                     } else if (data.type === 'candidate') {
-                        if (peerConnection && peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
+                        if (peerConnection && peerConnection.remoteDescription) {
                             await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
                         } else {
                             iceCandidatesQueue.push(data.candidate);
                         }
-                    } else if (data.type === 'chat_message') {
-                        const msg = document.createElement('div');
-                        msg.className = 'msg-text';
-                        msg.innerHTML = `<strong>Собеседник:</strong> ${escapeHtml(data.text)}`;
-                        chatBody.appendChild(msg);
-                        chatBody.scrollTop = chatBody.scrollHeight;
                     } else if (data.type === 'peer_disconnected') {
-                        addSystemMsg("Собеседник переключил чат.");
-                        cleanupPeerConnection();
-                        startTVNoise();
-                        remoteStatus.innerText = "Поиск следующего собеседника...";
-                        remoteStatus.style.display = 'block';
-                        
-                        setTimeout(() => {
-                            if (ws && ws.readyState === WebSocket.OPEN) {
-                                ws.send(JSON.stringify({ type: 'find_peer' }));
-                            }
-                        }, 800);
+                        handlePeerDisconnect();
+                    } else if (data.type === 'chat_message') {
+                        addChatMessage(data.text, false);
                     }
-                } catch (err) {}
+                } catch (e) { }
             };
         }
 
-        connectWebSocket();
+        async function initMedia(facingMode = 'user') {
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
 
-        async function initMedia() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: currentFacingMode },
-                    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: facingMode,
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    },
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
                 });
-                localStream = stream;
-                
-                if (isMuted) {
-                    localStream.getAudioTracks().forEach(t => t.enabled = false);
-                }
 
-                // ЛОГИКА ЗЕРКАЛА ДЛЯ ФРОНТАЛКИ
-                if (currentFacingMode === 'user') {
+                if (facingMode === 'user') {
                     localVideo.classList.add('mirrored');
                 } else {
                     localVideo.classList.remove('mirrored');
                 }
 
-                localVideo.srcObject = localStream;
-                localVideo.style.display = 'block';
-                localStatus.style.display = 'none';
-                mediaInitialized = true;
             } catch (err) {
+                addSystemMsg("Камера не найдена, включен аудио-режим", 'error');
                 try {
-                    const audioStream = await navigator.mediaDevices.getUserMedia({ 
-                        video: false, 
-                        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
-                    });
-                    localStream = audioStream;
-                    if (isMuted) {
-                        localStream.getAudioTracks().forEach(t => t.enabled = false);
-                    }
-                    localVideo.srcObject = localStream;
-                    localStatus.innerText = "Камера недоступна (только аудио)";
-                    localStatus.style.display = 'block';
-                    mediaInitialized = true;
-                } catch (e) {
-                    localStatus.innerText = "Ошибка доступа к камере и микрофону";
-                    addSystemMsg("Не удалось получить доступ к медиа-устройствам.", "error");
+                    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                } catch (audioErr) {
+                    addSystemMsg("Микрофон недоступен", 'error');
+                    return false;
                 }
             }
+
+            localVideo.srcObject = localStream;
+            localVideo.style.display = 'block';
+            localStatus.style.display = 'none';
+            mediaInitialized = true;
+            return true;
         }
 
         function createPeerConnection() {
-            if (peerConnection) return;
             peerConnection = new RTCPeerConnection(configuration);
+            iceCandidatesQueue = [];
 
             if (localStream) {
                 localStream.getTracks().forEach(track => {
@@ -934,211 +933,184 @@
                 });
             }
 
-            peerConnection.ontrack = (event) => {
-                if (event.streams && event.streams[0]) {
-                    remoteVideo.srcObject = event.streams[0];
-                    remoteVideo.style.display = 'block';
-                    stopTVNoise();
-                    remoteStatus.style.display = 'none';
-                    startNSFWCheck();
-                }
-            };
-
             peerConnection.onicecandidate = (event) => {
-                if (event.candidate && ws && ws.readyState === WebSocket.OPEN) {
+                if (event.candidate && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ type: 'candidate', candidate: event.candidate }));
                 }
             };
 
-            let isRestarting = false;
-            peerConnection.onconnectionstatechange = async () => {
+            peerConnection.ontrack = (event) => {
+                remoteVideo.srcObject = event.streams[0];
+                remoteVideo.style.display = 'block';
+                remoteStatus.style.display = 'none';
+                stopTVNoise();
+                startNSFWCheck();
+            };
+
+            peerConnection.oniceconnectionstatechange = () => {
                 if (!peerConnection) return;
                 
-                if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
+                const state = peerConnection.iceConnectionState;
+                if (state === 'disconnected' || state === 'failed') {
                     networkWarning.style.display = 'flex';
-                    
-                    if (!isRestarting && peerConnection.connectionState === 'failed') {
-                        isRestarting = true;
-                        try {
-                            const offer = await peerConnection.createOffer({ iceRestart: true });
-                            await peerConnection.setLocalDescription(offer);
-                            if (ws && ws.readyState === WebSocket.OPEN) {
-                                ws.send(JSON.stringify({ type: 'offer', offer: offer }));
-                            }
-                        } catch (e) {}
-                        setTimeout(() => { isRestarting = false; }, 4000);
-                    }
-                } else if (peerConnection.connectionState === 'connected') {
+                    peerConnection.restartIce(); 
+                } else if (state === 'connected' || state === 'completed') {
                     networkWarning.style.display = 'none';
-                    isRestarting = false;
                 }
             };
         }
 
         async function processIceQueue() {
-            while (iceCandidatesQueue.length > 0 && peerConnection && peerConnection.remoteDescription) {
-                const candidate = iceCandidatesQueue.shift();
+            if (!peerConnection) return;
+            for (let candidate of iceCandidatesQueue) {
                 try {
                     await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-                } catch (e) {}
+                } catch(e) {}
             }
-        }
-
-        function cleanupPeerConnection() {
-            stopNSFWCheck();
-            if (peerConnection) {
-                peerConnection.ontrack = null;
-                peerConnection.onicecandidate = null;
-                peerConnection.onconnectionstatechange = null;
-                peerConnection.close();
-                peerConnection = null;
-            }
-            remoteVideo.srcObject = null;
-            remoteVideo.style.display = 'none';
-            networkWarning.style.display = 'none';
-            nsfwBlurOverlay.style.display = 'none';
             iceCandidatesQueue = [];
         }
 
+        function cleanupPeerConnection() {
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            remoteVideo.style.display = 'none';
+            remoteVideo.srcObject = null;
+            networkWarning.style.display = 'none';
+            stopNSFWCheck();
+            iceCandidatesQueue = [];
+        }
+
+        function handlePeerDisconnect() {
+            cleanupPeerConnection();
+            addSystemMsg("Собеседник отключился.");
+            startTVNoise();
+            remoteStatus.style.display = 'block';
+            remoteStatus.innerText = "Собеседник отключился. Ищем нового...";
+            
+            setTimeout(() => {
+                if (sessionStorage.getItem('chatex_active_session') === 'true') {
+                    triggerSearch();
+                }
+            }, 500);
+        }
+
         function addSystemMsg(text, type = 'system') {
-            const msg = document.createElement('div');
-            msg.className = type === 'error' ? 'msg-error' : 'msg-system';
-            msg.innerText = text;
-            chatBody.appendChild(msg);
+            const div = document.createElement('div');
+            div.className = type === 'error' ? 'msg-error' : 'msg-system';
+            div.innerText = text;
+            chatBody.appendChild(div);
             chatBody.scrollTop = chatBody.scrollHeight;
         }
 
-        function escapeHtml(str) {
-            return str.replace(/[&<>"']/g, function(m) {
-                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m];
-            });
+        function addChatMessage(text, isMine) {
+            const div = document.createElement('div');
+            div.className = 'msg-text';
+            const safeText = text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            div.innerHTML = `<strong style="color: ${isMine ? '#3b82f6' : '#22c55e'}">${isMine ? 'Вы' : 'Собеседник'}:</strong> ${safeText}`;
+            chatBody.appendChild(div);
+            chatBody.scrollTop = chatBody.scrollHeight;
         }
 
-        let isActionCooldown = false;
-
-        function triggerCooldown(duration = 1200) {
-            isActionCooldown = true;
-            nextBtn.disabled = true;
-            stopBtn.disabled = true;
-            setTimeout(() => {
-                isActionCooldown = false;
-                nextBtn.disabled = false;
-                stopBtn.disabled = false;
-            }, duration);
+        function cooldownButton(btn, ms = 1200) {
+            btn.disabled = true;
+            setTimeout(() => { btn.disabled = false; }, ms);
         }
 
         async function triggerSearch() {
-            sessionStorage.setItem('chatex_active_session', 'true');
-
             if (!mediaInitialized) {
-                await initMedia();
+                const success = await initMedia(currentFacingMode);
+                if (!success) return;
             }
-            startTVNoise();
-            remoteStatus.innerText = "Поиск собеседника...";
-            remoteStatus.style.display = 'block';
+            
+            sessionStorage.setItem('chatex_active_session', 'true');
+            
             cleanupPeerConnection();
-
+            startTVNoise();
+            remoteStatus.style.display = 'block';
+            remoteStatus.innerText = "Поиск собеседника...";
+            
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'find_peer' }));
+            } else {
+                connectWebSocket();
             }
-            addSystemMsg("Поиск нового собеседника...");
         }
 
         nextBtn.addEventListener('click', () => {
-            if (isActionCooldown) return;
-            triggerCooldown();
+            cooldownButton(nextBtn);
+            chatBody.innerHTML = '';
+            addSystemMsg("Поиск начат...");
             triggerSearch();
         });
 
         stopBtn.addEventListener('click', () => {
-            if (isActionCooldown) return;
-            triggerCooldown();
-
-            sessionStorage.removeItem('chatex_active_session');
-
-            cleanupPeerConnection();
+            cooldownButton(stopBtn);
+            sessionStorage.setItem('chatex_active_session', 'false');
+            
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'stop_search' }));
             }
+            
+            cleanupPeerConnection();
             startTVNoise();
-            remoteStatus.innerText = "Поиск остановлен. Нажмите «НАЧАТЬ».";
             remoteStatus.style.display = 'block';
-            addSystemMsg("Вы остановили общение.");
+            remoteStatus.innerText = "Поиск остановлен. Нажмите «НАЧАТЬ».";
+            addSystemMsg("Вы остановили поиск.");
         });
 
         muteBtn.addEventListener('click', () => {
-            isMuted = !isMuted;
             if (localStream) {
-                localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
+                const audioTrack = localStream.getAudioTracks()[0];
+                if (audioTrack) {
+                    isMuted = !isMuted;
+                    audioTrack.enabled = !isMuted;
+                    muteBtn.innerHTML = isMuted ? '🔇' : '🎙️️';
+                    muteBtn.style.background = isMuted ? 'rgba(239, 68, 68, 0.2)' : '';
+                    muteBtn.style.borderColor = isMuted ? 'rgba(239, 68, 68, 0.5)' : '';
+                }
             }
-            muteBtn.innerText = isMuted ? '🔇' : '🎙️';
-            muteBtn.style.background = isMuted ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.05)';
         });
 
         flipBtn.addEventListener('click', async () => {
             currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
-            if (localStream) {
-                localStream.getTracks().forEach(t => t.stop());
-            }
-            await initMedia();
-            if (peerConnection && localStream) {
-                const senders = peerConnection.getSenders();
+            const oldStream = localStream;
+            
+            const success = await initMedia(currentFacingMode);
+            if (success && peerConnection) {
                 const videoTrack = localStream.getVideoTracks()[0];
-                const sender = senders.find(s => s.track && s.track.kind === 'video');
+                const sender = peerConnection.getSenders().find(s => s.track.kind === 'video');
                 if (sender && videoTrack) {
                     sender.replaceTrack(videoTrack);
                 }
             }
         });
 
-        let lastMsgTime = 0;
-
-        function sendChatMessage() {
-            const now = Date.now();
-            if (now - lastMsgTime < 400) return;
-
-            const text = chatInput.value.trim().substring(0, 500);
-            if (!text) return;
+        sendBtn.addEventListener('click', () => {
+            const text = chatInput.value.trim();
+            if (!text || !peerConnection) return;
             
-            lastMsgTime = now;
-
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'chat_message', text: text }));
+                addChatMessage(text, true);
+                chatInput.value = '';
             }
+        });
 
-            const msg = document.createElement('div');
-            msg.className = 'msg-text';
-            msg.innerHTML = `<strong>Вы:</strong> ${escapeHtml(text)}`;
-            chatBody.appendChild(msg);
-            chatBody.scrollTop = chatBody.scrollHeight;
-            chatInput.value = '';
-        }
-
-        sendBtn.addEventListener('click', sendChatMessage);
-        chatInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') sendChatMessage();
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendBtn.click();
         });
 
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') {
-                const isSessionActive = sessionStorage.getItem('chatex_active_session') === 'true';
-                
-                if (isSessionActive) {
-                    if (!peerConnection || peerConnection.connectionState !== 'connected') {
-                        addSystemMsg("Возврат в приложение. Проверка и поиск собеседника...");
-                        triggerSearch();
-                    }
+                if (sessionStorage.getItem('chatex_active_session') === 'true' && (!peerConnection || peerConnection.iceConnectionState === 'disconnected')) {
+                    triggerSearch();
                 }
             }
         });
 
-        window.addEventListener('beforeunload', () => {
-            cleanupPeerConnection();
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'stop_search' }));
-                ws.close();
-            }
-        });
+        connectWebSocket();
     </script>
 </body>
 </html>
