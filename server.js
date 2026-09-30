@@ -1,123 +1,97 @@
+const WebSocket = require('ws');
 const http = require('http');
-const fs = require('fs');
-const path = require('path');
-const { WebSocketServer } = require('ws');
 
-const PORT = process.env.PORT || 8080;
-
-// HTTP-сервер для отдачи index.html
+// Создаем базовый HTTP-сервер для health-чеков (полезно для reverse proxy)
 const server = http.createServer((req, res) => {
-    if (req.url === '/' || req.url === '/index.html') {
-        fs.readFile(path.join(__dirname, 'index.html'), (err, data) => {
-            if (err) {
-                res.writeHead(500);
-                res.end('Ошибка загрузки index.html');
-                return;
-            }
-            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-            res.end(data);
-        });
-    } else {
-        res.writeHead(404);
-        res.end('Not found');
-    }
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Chatex Signaling Server is running.');
 });
 
-const wss = new WebSocketServer({ server });
+const wss = new WebSocket.Server({ server });
 
-let waitingUser = null;
+let waitingPeer = null;
+let onlineCount = 0;
 
 function broadcastOnlineCount() {
-    const count = wss.clients.size;
-    const payload = JSON.stringify({ type: 'online_count', count: count });
-    
-    wss.clients.forEach((client) => {
-        if (client.readyState === 1) {
-            client.send(payload);
+    const msg = JSON.stringify({ type: 'online_count', count: onlineCount });
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(msg);
         }
     });
 }
 
+function disconnectPeers(ws) {
+    if (ws === waitingPeer) {
+        waitingPeer = null; // Убираем из очереди поиска
+    }
+    if (ws.peer) {
+        if (ws.peer.readyState === WebSocket.OPEN) {
+            ws.peer.send(JSON.stringify({ type: 'peer_disconnected' }));
+        }
+        ws.peer.peer = null;
+        ws.peer = null;
+    }
+}
+
 wss.on('connection', (ws) => {
-    console.log('Пользователь подключился');
+    onlineCount++;
     broadcastOnlineCount();
 
     ws.on('message', (message) => {
         try {
             const data = JSON.parse(message);
 
-            // Поиск собеседника
-            if (data.type === 'find_peer') {
-                // Если был в паре — разрываем
-                if (ws.peer) {
-                    if (ws.peer.readyState === 1) {
-                        ws.peer.send(JSON.stringify({ type: 'peer_disconnected' }));
+            switch (data.type) {
+                case 'find_peer':
+                    disconnectPeers(ws); // На всякий случай очищаем старые связи
+                    if (waitingPeer && waitingPeer !== ws && waitingPeer.readyState === WebSocket.OPEN) {
+                        // Соединяем двух пользователей
+                        ws.peer = waitingPeer;
+                        waitingPeer.peer = ws;
+
+                        // Кто-то один должен быть инициатором (создавать Offer)
+                        ws.send(JSON.stringify({ type: 'peer_found', initiator: false }));
+                        waitingPeer.send(JSON.stringify({ type: 'peer_found', initiator: true }));
+
+                        waitingPeer = null; // Очищаем очередь
+                    } else {
+                        waitingPeer = ws;
                     }
-                    ws.peer.peer = null;
-                    ws.peer = null;
-                }
+                    break;
 
-                // Если уже висел в очереди — сбрасываем старую очередь
-                if (waitingUser === ws) {
-                    waitingUser = null;
-                }
+                case 'stop_search':
+                    disconnectPeers(ws);
+                    break;
 
-                if (waitingUser && waitingUser !== ws && waitingUser.readyState === 1) {
-                    ws.peer = waitingUser;
-                    waitingUser.peer = ws;
-
-                    ws.send(JSON.stringify({ type: 'peer_found', initiator: true }));
-                    waitingUser.send(JSON.stringify({ type: 'peer_found', initiator: false }));
-
-                    console.log('Пара успешно сформирована!');
-                    waitingUser = null;
-                } else {
-                    waitingUser = ws;
-                    console.log('Пользователь добавлен в очередь');
-                }
-            }
-
-            // Остановка поиска
-            if (data.type === 'stop_search') {
-                if (waitingUser === ws) {
-                    waitingUser = null;
-                }
-                if (ws.peer) {
-                    if (ws.peer.readyState === 1) {
-                        ws.peer.send(JSON.stringify({ type: 'peer_disconnected' }));
+                case 'offer':
+                case 'answer':
+                case 'candidate':
+                case 'chat_message':
+                    // Пересылаем данные только собеседнику
+                    if (ws.peer && ws.peer.readyState === WebSocket.OPEN) {
+                        ws.peer.send(JSON.stringify(data));
+                    } else {
+                        console.error(`[Server] Ошибка пересылки ${data.type}: собеседник не найден или отключен.`);
                     }
-                    ws.peer.peer = null;
-                    ws.peer = null;
-                }
-            }
+                    break;
 
-            // Пересылка WebRTC сообщений и чата
-            if (['offer', 'answer', 'candidate', 'chat_message'].includes(data.type)) {
-                if (ws.peer && ws.peer.readyState === 1) {
-                    ws.peer.send(JSON.stringify(data));
-                }
+                default:
+                    console.warn('[Server] Неизвестный тип сообщения:', data.type);
             }
         } catch (err) {
-            console.error('Ошибка обработки:', err);
+            console.error('[Server] Ошибка обработки сообщения (неверный JSON):', err);
         }
     });
 
     ws.on('close', () => {
-        console.log('Пользователь отключился');
-        if (waitingUser === ws) {
-            waitingUser = null;
-        }
-        if (ws.peer) {
-            if (ws.peer.readyState === 1) {
-                ws.peer.send(JSON.stringify({ type: 'peer_disconnected' }));
-            }
-            ws.peer.peer = null;
-            ws.peer = null;
-        }
+        onlineCount--;
+        disconnectPeers(ws);
         broadcastOnlineCount();
     });
 });
 
+const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
-    console.log(`🚀 Сервер запущен на порту ${PORT}`);
+    console.log(`[Server] Signaling server listening on port ${PORT}`);
 });
