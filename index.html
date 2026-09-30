@@ -291,11 +291,11 @@
         .network-warning span { font-size: 1.1rem; font-weight: bold; margin-bottom: 6px; }
         .network-warning small { color: var(--text-muted); font-size: 0.85rem; }
 
-        /* ОВЕРЛЕЙ БЛОКИРОВКИ (ГОЛЫЙ ТОРС / 18+) */
+        /* ИСПРАВЛЕННЫЙ ОВЕРЛЕЙ ПРЕДУПРЕЖДЕНИЯ (БЕЗ СКАПРИЗНОГО ТЕКСТА) */
         .nsfw-blur-overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: #020617;
+            background: rgba(2, 6, 23, 0.92);
             display: none;
             flex-direction: column;
             align-items: center;
@@ -304,18 +304,19 @@
             color: #fff;
             text-align: center;
             padding: 20px;
+            backdrop-filter: blur(8px);
         }
         .nsfw-blur-overlay .badge-18 {
             background: var(--accent-red);
             color: #fff;
-            font-size: 1.1rem;
+            font-size: 1.05rem;
             font-weight: bold;
             padding: 6px 16px;
             border-radius: 30px;
             margin-bottom: 10px;
             box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);
         }
-        .nsfw-blur-overlay p { font-size: 0.95rem; color: #cbd5e1; }
+        .nsfw-blur-overlay p { font-size: 0.95rem; color: #cbd5e1; max-width: 80%; line-height: 1.4; }
 
         .control-buttons {
             display: flex;
@@ -490,14 +491,14 @@
                 <h3>Правила адекватного общения и модерации</h3>
                 <p><b>1. Формат платформы:</b> Chatex создавался для интересного, живого и адекватного общения. Любые проявления вирта, похабщины и неадекватности здесь запрещены.</p>
                 <p><b>2. Строгое возрастное ограничение (18+):</b> Платформа предназначена только для совершеннолетних. Несовершеннолетние обязаны немедленно покинуть ресурс.</p>
-                <p><b>3. Автоматическая нейро-модерация (18+ Blackout):</b> В систему встроен фоновый фильтр. При попытке демонстрации запрещенного или откровенного контента видео собеседника мгновенно скрывается черным экраном.</p>
-                <p><b>4. Запрет на ненадлежащий контент:</b> Строго запрещены попытки трансляции сексуального, экстремистского или шок-контента. Нарушители блокируются навсегда по IP.</p>
-                <p><b>5. Архитектура P2P:</b> Связь работает напрямую между устройствами (WebRTC). Разговоры не записываются и не сохраняются на центральных серверах.</p>
-                <p><b>6. Безопасность и анонимность:</b> Не передавайте личные данные, номер телефона или адрес проживания незнакомым людям в первых минутах разговора.</p>
-                <p><b>7. Взаимное уважение:</b> Запрещены оскорбления, травля, угрозы и спам. Нарушение ведет к немедленному бану.</p>
-                <p><b>8. Мгновенный сброс:</b> Если собеседник вам неприятен — нажимайте «ДАЛЕЕ». Не тратьте время на негативные эмоции.</p>
-                <p><b>9. Отказ от ответственности:</b> Администрация не отвечает за высказывания участников, но пресекает нарушения умными фильтрами.</p>
-                <p><b>10. Акцепт условий:</b> Нажимая кнопку входа, вы подтверждаете совершеннолетие и принимаете полную ответственность за соблюдение правил.</p>
+                <p><b>3. Автоматическая нейро-модерация:</b> В систему встроен фоновый фильтр. При нарушении правил трансляция временно приостанавливается.</p>
+                <p><b>4. Запрет на ненадлежащий контент:</b> Строго запрещены попытки трансляции сексуального, экстремистского или шок-контента. Нарушители блокируются навсегда.</p>
+                <p><b>5. Архитектура P2P:</b> Связь работает напрямую между устройствами (WebRTC). Разговоры не записываются на серверах.</p>
+                <p><b>6. Безопасность и анонимность:</b> Не передавайте личные данные, номер телефона или адрес проживания незнакомым людям.</p>
+                <p><b>7. Взаимное уважение:</b> Запрещены оскорбления, травля, угрозы и спам.</p>
+                <p><b>8. Мгновенный сброс:</b> Если собеседник вам неприятен — нажимайте «НАЧАТЬ» для поиска следующего.</p>
+                <p><b>9. Отказ от ответственности:</b> Администрация пресекает нарушения умными фильтрами.</p>
+                <p><b>10. Акцепт условий:</b> Нажимая кнопку входа, вы подтверждаете совершеннолетие и принимаете правила.</p>
             </div>
 
             <div class="checkbox-group" id="age-group">
@@ -528,11 +529,13 @@
                 <div class="video-window">
                     <canvas class="tv-noise-canvas" id="tvNoiseCanvas"></canvas>
                     <video id="remoteVideo" autoplay playsinline webkit-playsinline></video>
-                    <!-- Оверлей блокировки -->
+                    
+                    <!-- Обновленный мягкий оверлей предупреждения -->
                     <div class="nsfw-blur-overlay" id="nsfwBlurOverlay">
                         <div class="badge-18">18+ ВНИМАНИЕ</div>
-                        <p>Обнаружен запрещенный контент (голый торс)</p>
+                        <p id="nsfwText">Пожалуйста, соблюдайте правила общения</p>
                     </div>
+
                     <div class="video-status" id="remoteStatus" style="display: none;">Поиск не запущен. Нажмите «НАЧАТЬ».</div>
                     <div class="network-warning" id="networkWarning">
                         <span>⚠️ Плохое соединение</span>
@@ -765,7 +768,7 @@
                 } finally {
                     isChecking = false;
                 }
-            }, 250);
+            }, 300);
         }
 
         function stopNSFWCheck() {
@@ -795,6 +798,14 @@
             const protocol = location.protocol === 'https:' ? 'wss://' : 'ws://';
             ws = new WebSocket(protocol + location.host);
             
+            ws.onopen = () => {
+                // Если сессия была активной до перезагрузки, запускаем поиск автоматически
+                if (sessionStorage.getItem('chatex_active_session') === 'true') {
+                    addSystemMsg("Восстановление соединения...");
+                    setTimeout(() => { triggerSearch(); }, 300);
+                }
+            };
+
             ws.onclose = () => setTimeout(connectWebSocket, 1500);
 
             ws.onmessage = async (event) => {
@@ -856,7 +867,7 @@
                             if (ws && ws.readyState === WebSocket.OPEN) {
                                 ws.send(JSON.stringify({ type: 'find_peer' }));
                             }
-                        }, 1000);
+                        }, 800);
                     }
                 } catch (err) {}
             };
@@ -991,7 +1002,7 @@
             });
         }
 
-        // ЗАЩИТА ОТ КЛИК-СПАМА (RATE LIMIT ON BUTTONS)
+        // ЗАЩИТА ОТ КЛИК-СПАМА
         let isActionCooldown = false;
 
         function triggerCooldown(duration = 1200) {
@@ -1005,9 +1016,8 @@
             }, duration);
         }
 
-        nextBtn.addEventListener('click', async () => {
-            if (isActionCooldown) return;
-            triggerCooldown();
+        async function triggerSearch() {
+            sessionStorage.setItem('chatex_active_session', 'true');
 
             if (!mediaInitialized) {
                 await initMedia();
@@ -1021,11 +1031,19 @@
                 ws.send(JSON.stringify({ type: 'find_peer' }));
             }
             addSystemMsg("Поиск нового собеседника...");
+        }
+
+        nextBtn.addEventListener('click', () => {
+            if (isActionCooldown) return;
+            triggerCooldown();
+            triggerSearch();
         });
 
         stopBtn.addEventListener('click', () => {
             if (isActionCooldown) return;
             triggerCooldown();
+
+            sessionStorage.removeItem('chatex_active_session');
 
             cleanupPeerConnection();
             if (ws && ws.readyState === WebSocket.OPEN) {
@@ -1067,7 +1085,7 @@
 
         function sendChatMessage() {
             const now = Date.now();
-            if (now - lastMsgTime < 400) return; // Не чаще 1 сообщения в 0.4 сек
+            if (now - lastMsgTime < 400) return;
 
             const text = chatInput.value.trim().substring(0, 500);
             if (!text) return;
@@ -1089,6 +1107,20 @@
         sendBtn.addEventListener('click', sendChatMessage);
         chatInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') sendChatMessage();
+        });
+
+        // ВОССТАНОВЛЕНИЕ СВЯЗИ ПОСЛЕ ВХОДЯЩЕГО ЗВОНКА ИЛИ СВОРАЧИВАНИЯ ВКЛАДКИ
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                const isSessionActive = sessionStorage.getItem('chatex_active_session') === 'true';
+                
+                if (isSessionActive) {
+                    if (!peerConnection || peerConnection.connectionState !== 'connected') {
+                        addSystemMsg("Возврат в приложение. Проверка и поиск собеседника...");
+                        triggerSearch();
+                    }
+                }
+            }
         });
 
         // БЕСШОВНАЯ ОЧИСТКА ПРИ ЗАКРЫТИИ ВКЛАДКИ
