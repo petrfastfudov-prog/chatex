@@ -1,10 +1,20 @@
-const WebSocket = require('ws');
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const WebSocket = require('ws');
 
-// Создаем базовый HTTP-сервер для health-чеков (полезно для reverse proxy)
+// Создаем HTTP-сервер, который отдает index.html при открытии сайта
 const server = http.createServer((req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Chatex Signaling Server is running.');
+    const filePath = path.join(__dirname, 'index.html');
+    fs.readFile(filePath, (err, content) => {
+        if (err) {
+            res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+            res.end('Ошибка сервера: файл index.html не найден.');
+        } else {
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(content, 'utf-8');
+        }
+    });
 });
 
 const wss = new WebSocket.Server({ server });
@@ -23,7 +33,7 @@ function broadcastOnlineCount() {
 
 function disconnectPeers(ws) {
     if (ws === waitingPeer) {
-        waitingPeer = null; // Убираем из очереди поиска
+        waitingPeer = null;
     }
     if (ws.peer) {
         if (ws.peer.readyState === WebSocket.OPEN) {
@@ -44,17 +54,15 @@ wss.on('connection', (ws) => {
 
             switch (data.type) {
                 case 'find_peer':
-                    disconnectPeers(ws); // На всякий случай очищаем старые связи
+                    disconnectPeers(ws);
                     if (waitingPeer && waitingPeer !== ws && waitingPeer.readyState === WebSocket.OPEN) {
-                        // Соединяем двух пользователей
                         ws.peer = waitingPeer;
                         waitingPeer.peer = ws;
 
-                        // Кто-то один должен быть инициатором (создавать Offer)
                         ws.send(JSON.stringify({ type: 'peer_found', initiator: false }));
                         waitingPeer.send(JSON.stringify({ type: 'peer_found', initiator: true }));
 
-                        waitingPeer = null; // Очищаем очередь
+                        waitingPeer = null;
                     } else {
                         waitingPeer = ws;
                     }
@@ -68,19 +76,16 @@ wss.on('connection', (ws) => {
                 case 'answer':
                 case 'candidate':
                 case 'chat_message':
-                    // Пересылаем данные только собеседнику
                     if (ws.peer && ws.peer.readyState === WebSocket.OPEN) {
                         ws.peer.send(JSON.stringify(data));
-                    } else {
-                        console.error(`[Server] Ошибка пересылки ${data.type}: собеседник не найден или отключен.`);
                     }
                     break;
 
                 default:
-                    console.warn('[Server] Неизвестный тип сообщения:', data.type);
+                    break;
             }
         } catch (err) {
-            console.error('[Server] Ошибка обработки сообщения (неверный JSON):', err);
+            console.error('[Server] Ошибка обработки сообщения:', err);
         }
     });
 
@@ -93,5 +98,5 @@ wss.on('connection', (ws) => {
 
 const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
-    console.log(`[Server] Signaling server listening on port ${PORT}`);
+    console.log(`[Server] Запущено на порту ${PORT}`);
 });
