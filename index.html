@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Chatex — анонимный видеочат рулетка без регистрации</title>
+    <title>Chatex — анонимный видеочат</title>
     
-    <!-- TensorFlow.js и NSFWJS -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/nsfwjs@2.4.2/dist/nsfwjs.min.js"></script>
 
@@ -22,456 +21,62 @@
             --accent-red: #ef4444;
         }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        html, body {
-            height: 100vh;
-            height: 100dvh;
-            width: 100%;
-            overflow: hidden;
-            position: fixed;
-            top: 0;
-            left: 0;
-            background: var(--bg-main);
-            background-attachment: fixed;
-            color: var(--text-primary);
-            display: flex;
-            flex-direction: column;
-            touch-action: none;
-        }
-
-        /* ЗАСТАВКА С ПРАВИЛАМИ */
-        #welcome-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(2, 6, 23, 0.98);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-            backdrop-filter: blur(12px);
-        }
-
-        #welcome-modal {
-            background-color: var(--card-bg);
-            border: 1px solid var(--card-border);
-            border-radius: 16px;
-            padding: 30px;
-            width: 90%;
-            max-width: 640px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
-            color: var(--text-primary);
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
-
-        .modal-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .modal-title {
-            font-size: 1.4rem;
-            font-weight: bold;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .modal-badge {
-            background: var(--accent-red);
-            color: #fff;
-            font-size: 1rem;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-weight: bold;
-        }
-
-        #rules-box {
-            background: rgba(2, 6, 23, 0.6);
-            border: 1px solid var(--card-border);
-            border-radius: 10px;
-            height: 260px;
-            overflow-y: scroll;
-            padding: 16px;
-            font-size: 0.9rem;
-            line-height: 1.6;
-            color: var(--text-muted);
-            -webkit-overflow-scrolling: touch;
-        }
-
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
+        html, body { height: 100vh; height: 100dvh; width: 100%; overflow: hidden; position: fixed; top: 0; left: 0; background: var(--bg-main); background-attachment: fixed; color: var(--text-primary); display: flex; flex-direction: column; touch-action: none; }
+        #welcome-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(2, 6, 23, 0.98); display: flex; justify-content: center; align-items: center; z-index: 9999; backdrop-filter: blur(12px); }
+        #welcome-modal { background-color: var(--card-bg); border: 1px solid var(--card-border); border-radius: 16px; padding: 30px; width: 90%; max-width: 640px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8); color: var(--text-primary); display: flex; flex-direction: column; gap: 16px; }
+        .modal-header { display: flex; align-items: center; justify-content: space-between; }
+        .modal-title { font-size: 1.4rem; font-weight: bold; display: flex; align-items: center; gap: 10px; }
+        .modal-badge { background: var(--accent-red); color: #fff; font-size: 1rem; padding: 4px 12px; border-radius: 20px; font-weight: bold; }
+        #rules-box { background: rgba(2, 6, 23, 0.6); border: 1px solid var(--card-border); border-radius: 10px; height: 260px; overflow-y: scroll; padding: 16px; font-size: 0.9rem; line-height: 1.6; color: var(--text-muted); -webkit-overflow-scrolling: touch; }
         #rules-box h3 { color: var(--text-primary); margin-bottom: 10px; font-size: 1.05rem; }
         #rules-box p { margin-bottom: 12px; }
         #rules-box b { color: #f8fafc; }
-
-        #rules-box::-webkit-scrollbar { width: 6px; }
-        #rules-box::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 10px; }
-        #rules-box::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
-
-        .checkbox-group {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            background: rgba(59, 130, 246, 0.1);
-            padding: 12px 16px;
-            border-radius: 8px;
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            cursor: pointer;
-        }
-
+        .checkbox-group { display: flex; align-items: center; gap: 12px; background: rgba(59, 130, 246, 0.1); padding: 12px 16px; border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.2); cursor: pointer; }
         .checkbox-group input { width: 20px; height: 20px; cursor: pointer; }
         .checkbox-group label { cursor: pointer; font-weight: bold; font-size: 0.95rem; user-select: none; }
-
-        #accept-btn {
-            background: var(--accent-green);
-            color: #fff;
-            border: none;
-            padding: 14px;
-            border-radius: 10px;
-            font-size: 1.05rem;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        #accept-btn:disabled { background: #1e293b; color: #475569; cursor: not-allowed; box-shadow: none; }
-        #accept-btn:not(:disabled):hover { background: #16a34a; box-shadow: 0 4px 14px rgba(34, 197, 94, 0.3); }
-
-        /* Шапка */
-        header {
-            height: 58px;
-            background: var(--header-bg);
-            backdrop-filter: blur(8px);
-            color: #fff;
-            padding: 0 24px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 1px solid var(--card-border);
-            flex-shrink: 0;
-        }
-
-        .brand {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 1.3rem;
-            font-weight: bold;
-            letter-spacing: 0.5px;
-            cursor: pointer;
-            user-select: none;
-        }
-
-        .brand-icon {
-            background: var(--accent-blue);
-            color: #fff;
-            width: 32px;
-            height: 32px;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.1rem;
-            box-shadow: 0 0 12px rgba(59, 130, 246, 0.5);
-        }
-
-        #creator-tag {
-            font-size: 0.8rem;
-            color: #38bdf8;
-            background: rgba(56, 189, 248, 0.1);
-            border: 1px solid rgba(56, 189, 248, 0.3);
-            padding: 3px 8px;
-            border-radius: 6px;
-            margin-left: 10px;
-            display: none;
-            font-weight: normal;
-        }
-
+        #accept-btn { background: var(--accent-green); color: #fff; border: none; padding: 14px; border-radius: 10px; font-size: 1.05rem; font-weight: bold; cursor: pointer; transition: all 0.3s; }
+        #accept-btn:disabled { background: #1e293b; color: #475569; cursor: not-allowed; }
+        header { height: 58px; background: var(--header-bg); backdrop-filter: blur(8px); color: #fff; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--card-border); flex-shrink: 0; }
+        .brand { display: flex; align-items: center; gap: 10px; font-size: 1.3rem; font-weight: bold; cursor: pointer; }
+        .brand-icon { background: var(--accent-blue); color: #fff; width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+        #creator-tag { font-size: 0.8rem; color: #38bdf8; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); padding: 3px 8px; border-radius: 6px; display: none; }
         .header-meta { font-size: 0.85rem; color: var(--text-muted); }
         .online-count { color: #38bdf8; font-weight: bold; }
-
-        /* Основной контейнер */
-        .main-wrapper {
-            flex: 1;
-            gap: 20px;
-            padding: 20px;
-            max-width: 1600px;
-            width: 100%;
-            margin: 0 auto;
-            min-height: 0;
-            overflow: hidden;
-            display: none;
-        }
-
-        .left-column {
-            width: 520px;
-            display: flex;
-            flex-direction: column;
-            gap: 14px;
-            height: 100%;
-            min-height: 0;
-        }
-
-        .videos-container {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            min-height: 0;
-            position: relative;
-        }
-
-        .video-window {
-            flex: 1;
-            width: 100%;
-            background-color: var(--card-bg);
-            border-radius: 12px;
-            border: 1px solid var(--card-border);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 0;
-            text-align: center;
-            position: relative;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-            overflow: hidden;
-        }
-
-        video, #localVideo, #remoteVideo {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            display: none;
-            position: absolute;
-            top: 0; left: 0;
-            z-index: 1;
-        }
-
-        .mirrored {
-            transform: scaleX(-1) !important;
-            -webkit-transform: scaleX(-1) !important;
-        }
-
-        .tv-noise-canvas {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            object-fit: cover; display: none; z-index: 2; opacity: 0.85;
-        }
-
-        .video-status {
-            color: var(--text-muted);
-            font-size: 0.95rem;
-            line-height: 1.5;
-            padding: 20px;
-            max-width: 85%;
-            z-index: 3;
-            background: rgba(15, 23, 42, 0.65);
-            backdrop-filter: blur(4px);
-            border-radius: 8px;
-        }
-
-        .network-warning {
-            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(15, 23, 42, 0.88);
-            color: #f59e0b;
-            display: none; flex-direction: column; align-items: center;
-            justify-content: center; text-align: center; padding: 20px;
-            z-index: 10; backdrop-filter: blur(6px);
-        }
-
-        .network-warning span { font-size: 1.1rem; font-weight: bold; margin-bottom: 6px; }
-        .network-warning small { color: var(--text-muted); font-size: 0.85rem; }
-
-        .nsfw-blur-overlay {
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(2, 6, 23, 0.92);
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 5;
-            color: #fff;
-            text-align: center;
-            padding: 20px;
-            backdrop-filter: blur(8px);
-        }
-        .nsfw-blur-overlay .badge-18 {
-            background: var(--accent-red);
-            color: #fff;
-            font-size: 1.05rem;
-            font-weight: bold;
-            padding: 6px 16px;
-            border-radius: 30px;
-            margin-bottom: 10px;
-            box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);
-        }
-        .nsfw-blur-overlay p { font-size: 0.95rem; color: #cbd5e1; max-width: 80%; line-height: 1.4; }
-
-        .control-buttons {
-            display: flex;
-            gap: 10px;
-            flex-shrink: 0;
-        }
-
-        .btn {
-            flex: 1;
-            padding: 16px 0;
-            border: none;
-            border-radius: 10px;
-            font-size: 1.1rem;
-            font-weight: bold;
-            color: #fff;
-            cursor: pointer;
-            transition: all 0.2s;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-        }
-
-        .btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none !important;
-        }
-
-        .btn:active:not(:disabled) { transform: translateY(1px); }
+        .main-wrapper { flex: 1; gap: 20px; padding: 20px; max-width: 1600px; width: 100%; margin: 0 auto; min-height: 0; overflow: hidden; display: none; }
+        .left-column { width: 520px; display: flex; flex-direction: column; gap: 14px; height: 100%; min-height: 0; }
+        .videos-container { flex: 1; display: flex; flex-direction: column; gap: 12px; min-height: 0; position: relative; }
+        .video-window { flex: 1; width: 100%; background-color: var(--card-bg); border-radius: 12px; border: 1px solid var(--card-border); display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+        video, #localVideo, #remoteVideo { width: 100%; height: 100%; object-fit: cover; display: none; position: absolute; top: 0; left: 0; z-index: 1; }
+        .mirrored { transform: scaleX(-1) !important; -webkit-transform: scaleX(-1) !important; }
+        .tv-noise-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; display: none; z-index: 2; opacity: 0.85; }
+        .video-status { color: var(--text-muted); font-size: 0.95rem; line-height: 1.5; padding: 20px; max-width: 85%; z-index: 3; text-align: center; background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(4px); border-radius: 8px; }
+        .network-warning { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.88); color: #f59e0b; display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; z-index: 10; backdrop-filter: blur(6px); }
+        .nsfw-blur-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(2, 6, 23, 0.92); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 5; color: #fff; text-align: center; padding: 20px; backdrop-filter: blur(8px); }
+        .nsfw-blur-overlay .badge-18 { background: var(--accent-red); padding: 6px 16px; border-radius: 30px; margin-bottom: 10px; font-weight: bold; }
+        .control-buttons { display: flex; gap: 10px; flex-shrink: 0; }
+        .btn { flex: 1; padding: 16px 0; border: none; border-radius: 10px; font-size: 1.1rem; font-weight: bold; color: #fff; cursor: pointer; transition: all 0.2s; }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
         .btn-start { background: var(--accent-green); }
-        .btn-start:hover:not(:disabled) { background: #16a34a; }
         .btn-stop { background: var(--accent-red); }
-        .btn-stop:hover:not(:disabled) { background: #dc2626; }
-
-        .btn-icon {
-            flex: 0 0 52px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid var(--card-border);
-            font-size: 1.3rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 10px;
-            cursor: pointer;
-        }
-
-        .btn-icon:hover { background: rgba(255, 255, 255, 0.1); }
+        .btn-icon { flex: 0 0 52px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--card-border); font-size: 1.3rem; display: flex; align-items: center; justify-content: center; border-radius: 10px; cursor: pointer; }
         #flipBtn { display: none; }
-
-        /* Чат */
-        .right-column {
-            flex: 1;
-            height: 100%;
-            background: var(--card-bg);
-            border: 1px solid var(--card-border);
-            border-radius: 12px;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-            min-height: 0;
-        }
-
-        .chat-header {
-            background: rgba(2, 6, 23, 0.5);
-            border-bottom: 1px solid var(--card-border);
-            padding: 14px 20px;
-            font-size: 1.1rem;
-            color: var(--text-muted);
-            font-weight: bold;
-            flex-shrink: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .chat-body {
-            flex: 1;
-            padding: 20px;
-            overflow-y: auto;
-            font-size: 0.95rem;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            -webkit-overflow-scrolling: touch;
-            touch-action: pan-y;
-        }
-
+        .right-column { flex: 1; height: 100%; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+        .chat-header { background: rgba(2, 6, 23, 0.5); border-bottom: 1px solid var(--card-border); padding: 14px 20px; font-size: 1.1rem; color: var(--text-muted); font-weight: bold; text-align: center; }
+        .chat-body { flex: 1; padding: 20px; overflow-y: auto; font-size: 0.95rem; display: flex; flex-direction: column; gap: 12px; -webkit-overflow-scrolling: touch; }
         .msg-system { color: #64748b; font-size: 0.85rem; font-style: italic; }
         .msg-text { color: var(--text-primary); word-break: break-word; line-height: 1.4; }
-        .msg-error { color: var(--accent-red); font-size: 0.85rem; font-weight: bold; }
-
-        .chat-footer {
-            border-top: 1px solid var(--card-border);
-            padding: 12px 14px;
-            background: rgba(2, 6, 23, 0.5);
-            flex-shrink: 0;
-        }
-
+        .chat-footer { border-top: 1px solid var(--card-border); padding: 12px 14px; background: rgba(2, 6, 23, 0.5); }
         .input-wrapper { display: flex; gap: 10px; }
-
-        .chat-input {
-            flex: 1;
-            padding: 12px 16px;
-            background: rgba(2, 6, 23, 0.6);
-            border: 1px solid var(--card-border);
-            color: #fff;
-            border-radius: 8px;
-            font-size: 16px !important; 
-            outline: none;
-            transition: border-color 0.2s;
-            -webkit-appearance: none;
-            touch-action: manipulation;
-        }
-
-        .chat-input:focus { border-color: var(--accent-blue); }
-
-        .send-btn {
-            padding: 0 20px;
-            background: var(--accent-blue);
-            color: #fff;
-            border: none;
-            border-radius: 8px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: background 0.2s;
-            font-size: 0.95rem;
-        }
-
-        .send-btn:hover { background: #2563eb; }
+        .chat-input { flex: 1; padding: 12px 16px; background: rgba(2, 6, 23, 0.6); border: 1px solid var(--card-border); color: #fff; border-radius: 8px; font-size: 16px !important; outline: none; }
+        .send-btn { padding: 0 20px; background: var(--accent-blue); color: #fff; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
 
         @media (max-width: 768px) {
-            .main-wrapper {
-                flex-direction: column;
-                padding: 10px;
-                gap: 10px;
-                height: calc(100dvh - 58px);
-            }
-
+            .main-wrapper { flex-direction: column; padding: 10px; gap: 10px; height: calc(100dvh - 58px); }
             .left-column { width: 100%; flex: 1; min-height: 0; }
             .videos-container { display: block; position: relative; width: 100%; height: 100%; }
             .video-window:first-child { width: 100%; height: 100%; }
-
-            .video-window:last-child {
-                position: absolute;
-                bottom: 10px;
-                right: 10px;
-                width: 100px;
-                height: 140px;
-                z-index: 20;
-                border-radius: 10px;
-                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.8);
-                border: 2px solid rgba(255, 255, 255, 0.2);
-            }
-
+            .video-window:last-child { position: absolute; bottom: 10px; right: 10px; width: 100px; height: 140px; z-index: 20; border-radius: 10px; border: 2px solid rgba(255, 255, 255, 0.2); }
             .right-column { height: 170px; flex: none; min-height: 0; }
             #flipBtn { display: flex; }
         }
@@ -479,52 +84,36 @@
 </head>
 <body>
 
-    <!-- Заставка с правилами -->
     <div id="welcome-overlay">
         <div id="welcome-modal">
             <div class="modal-header">
-                <div class="modal-title">⚡ Chatex — Адекватный Чат</div>
+                <div class="modal-title">⚡ Chatex — Анонимный чат</div>
                 <div class="modal-badge">18+</div>
             </div>
-            
-            <p style="color: var(--text-muted); font-size: 0.9rem;">Ознакомьтесь с регламентом платформы. Прокрутите текст до конца для входа.</p>
-            
             <div id="rules-box">
-                <h3>Правила адекватного общения и модерации</h3>
-                <p><b>1. Формат платформы:</b> Chatex создавался для интересного, живого и адекватного общения. Любые проявления вирта, похабщины и неадекватности здесь запрещены.</p>
-                <p><b>2. Строгое возрастное ограничение (18+):</b> Платформа предназначена только для совершеннолетних. Несовершеннолетние обязаны немедленно покинуть ресурс.</p>
-                <p><b>3. Автоматическая нейро-модерация:</b> В систему встроен фоновый фильтр. При нарушении правил трансляция временно приостанавливается.</p>
-                <p><b>4. Запрет на ненадлежащий контент:</b> Строго запрещены попытки трансляции сексуального, экстремистского или шок-контента. Нарушители блокируются навсегда.</p>
-                <p><b>5. Архитектура P2P:</b> Связь работает напрямую между устройствами (WebRTC). Разговоры не записываются на серверах.</p>
-                <p><b>6. Безопасность и анонимность:</b> Не передавайте личные данные, номер телефона или адрес проживания незнакомым людям.</p>
-                <p><b>7. Взаимное уважение:</b> Запрещены оскорбления, травля, угрозы и спам.</p>
-                <p><b>8. Мгновенный сброс:</b> Если собеседник вам неприятен — нажимайте «НАЧАТЬ» для поиска следующего.</p>
-                <p><b>9. Отказ от ответственности:</b> Администрация пресекает нарушения умными фильтрами.</p>
-                <p><b>10. Акцепт условий:</b> Нажимая кнопку входа, вы подтверждаете совершеннолетие и принимаете правила.</p>
+                <h3>Правила общения</h3>
+                <p><b>1. Формат:</b> Только адекватное общение. Запрещены оскорбления и непристойный контент.</p>
+                <p><b>2. Возраст:</b> Сервис предназначен строго для лиц старше 18 лет.</p>
+                <p><b>3. Безопасность:</b> Не передавайте личные данные сторонним пользователям.</p>
             </div>
-
             <div class="checkbox-group" id="age-group">
                 <input type="checkbox" id="age-checkbox">
-                <label for="age-checkbox">Мне есть 18 лет, я за адекватное общение и принимаю правила</label>
+                <label for="age-checkbox">Мне есть 18 лет, я принимаю правила</label>
             </div>
-
             <button id="accept-btn" disabled>СОГЛАСИТЬСЯ И ВОЙТИ</button>
         </div>
     </div>
 
-    <!-- Шапка -->
     <header>
         <div class="brand" id="brandTitle">
             <div class="brand-icon">⚡</div>
             <span>Chatex</span>
-            <span id="creator-tag">Этот чат создал Пётр</span>
         </div>
         <div class="header-meta">
             <span>Онлайн: <strong class="online-count">1</strong></span>
         </div>
     </header>
 
-    <!-- Основная область -->
     <div class="main-wrapper" id="main-wrapper">
         <div class="left-column">
             <div class="videos-container">
@@ -534,37 +123,35 @@
                     
                     <div class="nsfw-blur-overlay" id="nsfwBlurOverlay">
                         <div class="badge-18">18+ ВНИМАНИЕ</div>
-                        <p id="nsfwText">Пожалуйста, соблюдайте правила общения</p>
+                        <p>Соблюдайте правила общения</p>
                     </div>
 
-                    <div class="video-status" id="remoteStatus" style="display: none;">Поиск не запущен. Нажмите «НАЧАТЬ».</div>
+                    <div class="video-status" id="remoteStatus">Нажмите «НАЧАТЬ»</div>
                     <div class="network-warning" id="networkWarning">
-                        <span>⚠️ Плохое соединение</span>
-                        <small>Восстановление связи с собеседником...</small>
+                        <span>⚠️ Соединение...</span>
+                        <small>Проверка маршрута (ICE)</small>
                     </div>
                 </div>
 
                 <div class="video-window">
                     <video id="localVideo" autoplay playsinline webkit-playsinline muted></video>
-                    <div class="video-status" id="localStatus">Нажмите «НАЧАТЬ» для включения камеры</div>
+                    <div class="video-status" id="localStatus">Нажмите «НАЧАТЬ»</div>
                 </div>
             </div>
 
             <div class="control-buttons">
                 <button class="btn btn-start" id="nextBtn">НАЧАТЬ</button>
                 <button class="btn btn-stop" id="stopBtn">СТОП</button>
-                <button class="btn-icon" id="muteBtn" title="Выключить микрофон">🎙️</button>
-                <button class="btn-icon" id="flipBtn" title="Сменить камеру">🔄</button>
+                <button class="btn-icon" id="muteBtn" title="Микрофон">🎙️</button>
+                <button class="btn-icon" id="flipBtn" title="Камера">🔄</button>
             </div>
         </div>
 
         <div class="right-column">
-            <div class="chat-header">💬</div>
-            
+            <div class="chat-header">💬 Чат</div>
             <div class="chat-body" id="chatBody">
-                <div class="msg-system">Вы вошли в чат. Нажмите «НАЧАТЬ» для включения камеры и поиска собеседника.</div>
+                <div class="msg-system">Нажмите «НАЧАТЬ» для поиска собеседника.</div>
             </div>
-
             <div class="chat-footer">
                 <div class="input-wrapper">
                     <input type="text" class="chat-input" id="chatInput" placeholder="Введите сообщение..." maxlength="500">
@@ -574,122 +161,50 @@
         </div>
     </div>
 
-    <canvas id="snapshotCanvas" width="160" height="120" style="display:none;"></canvas>
-
     <script>
-        const brandTitle = document.getElementById('brandTitle');
-        const creatorTag = document.getElementById('creator-tag');
-        let clickCount = 0;
-        let isCreatorTagVisible = false;
-
-        brandTitle.addEventListener('click', () => {
-            clickCount++;
-            if (clickCount >= 5) {
-                isCreatorTagVisible = !isCreatorTagVisible;
-                creatorTag.style.display = isCreatorTagVisible ? 'inline-block' : 'none';
-                clickCount = 0;
-            }
-        });
-
-        const rulesBox = document.getElementById('rules-box');
-        const ageCheckbox = document.getElementById('age-checkbox');
+        // === ЛОГИКА ИНТЕРФЕЙСА ===
         const acceptBtn = document.getElementById('accept-btn');
+        const ageCheckbox = document.getElementById('age-checkbox');
         const welcomeOverlay = document.getElementById('welcome-overlay');
         const mainWrapper = document.getElementById('main-wrapper');
-        const ageGroup = document.getElementById('age-group');
-
-        let hasScrolledToBottom = false;
 
         if (localStorage.getItem('chatex_rules_accepted') === 'true') {
             welcomeOverlay.style.display = 'none';
             mainWrapper.style.display = 'flex';
         }
 
-        function checkAcceptance() {
-            acceptBtn.disabled = !(hasScrolledToBottom && ageCheckbox.checked);
-        }
-
-        rulesBox.addEventListener('scroll', () => {
-            if (rulesBox.scrollHeight - rulesBox.scrollTop <= rulesBox.clientHeight + 5) {
-                hasScrolledToBottom = true;
-                checkAcceptance();
-            }
-        });
-
-        ageGroup.addEventListener('click', (e) => {
-            if (e.target !== ageCheckbox) {
-                ageCheckbox.checked = !ageCheckbox.checked;
-            }
-            checkAcceptance();
-        });
-
-        ageCheckbox.addEventListener('change', checkAcceptance);
-
+        ageCheckbox.addEventListener('change', () => { acceptBtn.disabled = !ageCheckbox.checked; });
         acceptBtn.addEventListener('click', () => {
             localStorage.setItem('chatex_rules_accepted', 'true');
             welcomeOverlay.style.display = 'none';
             mainWrapper.style.display = 'flex';
         });
 
+        // === ТВ ШУМ ===
         const tvCanvas = document.getElementById('tvNoiseCanvas');
         const tvCtx = tvCanvas.getContext('2d');
         let noiseAnimationId = null;
 
-        function resizeNoiseCanvas() {
-            tvCanvas.width = 320;
-            tvCanvas.height = 240;
-        }
-
         function generateTVNoise() {
-            const w = tvCanvas.width;
-            const h = tvCanvas.height;
-            if (w === 0 || h === 0) return;
-            
-            const imgData = tvCtx.createImageData(w, h);
+            if (tvCanvas.width === 0) { tvCanvas.width = 320; tvCanvas.height = 240; }
+            const imgData = tvCtx.createImageData(tvCanvas.width, tvCanvas.height);
             const buffer32 = new Uint32Array(imgData.data.buffer);
-            for (let i = 0; i < buffer32.length; i++) {
-                if (Math.random() < 0.5) {
-                    const c = Math.floor(Math.random() * 225);
-                    buffer32[i] = (255 << 24) | (c << 16) | (c << 8) | c;
-                } else {
-                    buffer32[i] = 0xff050505;
-                }
-            }
+            for (let i = 0; i < buffer32.length; i++) { buffer32[i] = Math.random() < 0.5 ? 0xffffffff : 0xff000000; }
             tvCtx.putImageData(imgData, 0, 0);
             noiseAnimationId = requestAnimationFrame(generateTVNoise);
         }
 
-        function startTVNoise() {
-            if (noiseAnimationId) return;
-            resizeNoiseCanvas();
-            tvCanvas.style.display = 'block';
-            generateTVNoise();
-        }
+        function startTVNoise() { if (!noiseAnimationId) { tvCanvas.style.display = 'block'; generateTVNoise(); } }
+        function stopTVNoise() { if (noiseAnimationId) { cancelAnimationFrame(noiseAnimationId); noiseAnimationId = null; } tvCanvas.style.display = 'none'; }
 
-        function stopTVNoise() {
-            if (noiseAnimationId) {
-                cancelAnimationFrame(noiseAnimationId);
-                noiseAnimationId = null;
-            }
-            tvCanvas.style.display = 'none';
-        }
-
+        // === ПЕРЕМЕННЫЕ WEBRTC ===
         const localVideo = document.getElementById('localVideo');
         const remoteVideo = document.getElementById('remoteVideo');
         const localStatus = document.getElementById('localStatus');
         const remoteStatus = document.getElementById('remoteStatus');
         const networkWarning = document.getElementById('networkWarning');
-        const nsfwBlurOverlay = document.getElementById('nsfwBlurOverlay');
-        const muteBtn = document.getElementById('muteBtn');
-        const flipBtn = document.getElementById('flipBtn');
-        const nextBtn = document.getElementById('nextBtn');
-        const stopBtn = document.getElementById('stopBtn');
         const chatBody = document.getElementById('chatBody');
         const chatInput = document.getElementById('chatInput');
-        const sendBtn = document.getElementById('sendBtn');
-        
-        const snapshotCanvas = document.getElementById('snapshotCanvas');
-        const snapshotCtx = snapshotCanvas.getContext('2d');
 
         let localStream = null;
         let peerConnection = null;
@@ -697,485 +212,366 @@
         let iceCandidatesQueue = [];
         let isMuted = false;
         let currentFacingMode = 'user';
-        let mediaInitialized = false;
+        let isInitiator = false;
+        let statsInterval = null;
 
-        let model = null;
-        let moderationInterval = null;
-        let isChecking = false;
+        // ДЛЯ ДИАГНОСТИКИ 4G: Чтобы принудительно пустить трафик через Relay(TURN), поменяйте FORCE_RELAY на true
+        const FORCE_RELAY = false; 
 
-        async function loadNSFWModel() {
-            try {
-                if (typeof nsfwjs !== 'undefined') {
-                    await tf.setBackend('webgl');
-                    await tf.ready();
-                    model = await nsfwjs.load();
-                }
-            } catch (err) {}
-        }
-        loadNSFWModel();
-
-        function checkSkinTone(ctx, width, height) {
-            const startY = Math.floor(height * 0.55);
-            const imgData = ctx.getImageData(0, startY, width, height - startY);
-            const data = imgData.data;
-            let skinPixels = 0;
-            let totalPixels = data.length / 4;
-
-            for (let i = 0; i < data.length; i += 4) {
-                const r = data[i];
-                const g = data[i + 1];
-                const b = data[i + 2];
-
-                const isSkin = (
-                    r > 95 && g > 40 && b > 20 &&
-                    Math.max(r, g, b) - Math.min(r, g, b) > 15 &&
-                    Math.abs(r - g) > 15 &&
-                    r > g && r > b
-                );
-
-                if (isSkin) skinPixels++;
-            }
-
-            return (skinPixels / totalPixels) > 0.40;
-        }
-
-        function startNSFWCheck() {
-            if (moderationInterval) clearInterval(moderationInterval);
-            
-            moderationInterval = setInterval(async () => {
-                if (!remoteVideo || remoteVideo.paused || remoteVideo.ended || remoteVideo.readyState < 2 || isChecking) {
-                    return;
-                }
-
-                isChecking = true;
-                try {
-                    snapshotCtx.drawImage(remoteVideo, 0, 0, 160, 120);
-                    let blockTriggered = false;
-
-                    if (checkSkinTone(snapshotCtx, 160, 120)) {
-                        blockTriggered = true;
-                    }
-
-                    if (model) {
-                        const predictions = await model.classify(snapshotCanvas);
-                        predictions.forEach(p => {
-                            if ((p.className === 'Porn' && p.probability > 0.08) || 
-                                (p.className === 'Sexy' && p.probability > 0.18) || 
-                                (p.className === 'Hentai' && p.probability > 0.08)) {
-                                blockTriggered = true;
-                            }
-                        });
-                    }
-
-                    nsfwBlurOverlay.style.display = blockTriggered ? 'flex' : 'none';
-                } catch (e) {
-                } finally {
-                    isChecking = false;
-                }
-            }, 300);
-        }
-
-        function stopNSFWCheck() {
-            if (moderationInterval) {
-                clearInterval(moderationInterval);
-                moderationInterval = null;
-            }
-            nsfwBlurOverlay.style.display = 'none';
-        }
-
+        // ИСПРАВЛЕННАЯ КОНФИГУРАЦИЯ СЕРВЕРОВ (Все протоколы TCP, UDP, TLS 443)
         const configuration = { 
             iceServers: [
-                {
-                    urls: "stun:stun.relay.metered.ca:80",
-                },
-                {
+                { urls: "stun:stun.l.google.com:19302" },
+                { urls: "stun:stun1.l.google.com:19302" },
+                { 
                     urls: "turn:global.relay.metered.ca:80",
                     username: "c886bcfb040d10544fdc8ae9",
                     credential: "DKXL6S2vHcBg0Nfx",
                 },
-                {
+                { 
                     urls: "turn:global.relay.metered.ca:80?transport=tcp",
                     username: "c886bcfb040d10544fdc8ae9",
                     credential: "DKXL6S2vHcBg0Nfx",
                 },
-                {
+                { 
                     urls: "turn:global.relay.metered.ca:443",
                     username: "c886bcfb040d10544fdc8ae9",
                     credential: "DKXL6S2vHcBg0Nfx",
                 },
-                {
+                { 
                     urls: "turns:global.relay.metered.ca:443?transport=tcp",
                     username: "c886bcfb040d10544fdc8ae9",
                     credential: "DKXL6S2vHcBg0Nfx",
                 }
             ],
+            iceTransportPolicy: FORCE_RELAY ? 'relay' : 'all',
             iceCandidatePoolSize: 10
         };
 
+        // === СЕТЬ И WEBSOCKET ===
         function connectWebSocket() {
             if (ws && ws.readyState !== WebSocket.CLOSED) return;
 
+            // Корректное определение протокола для reverse proxy
             const protocol = location.protocol === 'https:' ? 'wss://' : 'ws://';
             ws = new WebSocket(protocol + location.host);
-            
-            ws.onopen = () => {
-                if (sessionStorage.getItem('chatex_active_session') === 'true') {
-                    addSystemMsg("Восстановление соединения...");
-                    setTimeout(() => { triggerSearch(); }, 300);
-                }
-            };
 
-            ws.onclose = () => setTimeout(connectWebSocket, 1500);
+            ws.onclose = () => {
+                console.error("[WS] Соединение потеряно. Переподключение через 2 сек...");
+                setTimeout(connectWebSocket, 2000);
+            };
 
             ws.onmessage = async (event) => {
                 try {
                     const data = JSON.parse(event.data);
 
                     if (data.type === 'online_count') {
-                        const countEl = document.querySelector('.online-count');
-                        if (countEl) countEl.innerText = data.count;
+                        document.querySelector('.online-count').innerText = data.count;
                         return;
                     }
 
                     if (data.type === 'peer_found') {
-                        addSystemMsg("Собеседник найден! Соединение...");
-                        remoteStatus.innerText = "Установка соединения...";
-                        cleanupPeerConnection();
+                        console.log("[Signaling] Собеседник найден! Initiator:", data.initiator);
+                        addSystemMsg("Собеседник найден! Установка связи...");
+                        remoteStatus.innerText = "Подключение...";
+                        isInitiator = data.initiator;
+                        
+                        cleanupPeerConnection(false); // Очищаем без полного сброса UI
                         createPeerConnection();
                         
-                        if (data.initiator) {
-                            const offer = await peerConnection.createOffer({
-                                offerToReceiveAudio: true,
-                                offerToReceiveVideo: true
-                            });
-                            await peerConnection.setLocalDescription(offer);
-                            ws.send(JSON.stringify({ type: 'offer', offer: offer }));
+                        if (isInitiator) {
+                            try {
+                                const offer = await peerConnection.createOffer();
+                                await peerConnection.setLocalDescription(offer);
+                                ws.send(JSON.stringify({ type: 'offer', offer: offer }));
+                            } catch (e) {
+                                console.error("[WebRTC] Ошибка создания Offer:", e);
+                            }
                         }
-                    } else if (data.type === 'offer') {
-                        if (!peerConnection) createPeerConnection();
-                        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-                        const answer = await peerConnection.createAnswer();
-                        await peerConnection.setLocalDescription(answer);
-                        ws.send(JSON.stringify({ type: 'answer', answer: answer }));
-                        await processIceQueue();
-                    } else if (data.type === 'answer') {
+                    } 
+                    else if (data.type === 'offer') {
+                        console.log("[Signaling] Получен Offer");
+                        // Если у нас уже есть зависший PC — пересоздаем его для нового оффера
+                        if (peerConnection && peerConnection.connectionState !== 'new' && peerConnection.connectionState !== 'connecting') {
+                            cleanupPeerConnection(false);
+                            createPeerConnection();
+                        } else if (!peerConnection) {
+                            createPeerConnection();
+                        }
+
+                        try {
+                            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+                            await processIceQueue(); // Обрабатываем очередь ICE после установки RemoteDescription
+                            
+                            const answer = await peerConnection.createAnswer();
+                            await peerConnection.setLocalDescription(answer);
+                            ws.send(JSON.stringify({ type: 'answer', answer: answer }));
+                        } catch (e) {
+                            console.error("[WebRTC] Ошибка обработки Offer / создания Answer:", e);
+                        }
+                    } 
+                    else if (data.type === 'answer') {
+                        console.log("[Signaling] Получен Answer");
                         if (peerConnection) {
-                            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-                            await processIceQueue();
+                            try {
+                                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                                await processIceQueue();
+                            } catch (e) {
+                                console.error("[WebRTC] Ошибка установки Answer:", e);
+                            }
                         }
-                    } else if (data.type === 'candidate') {
+                    } 
+                    else if (data.type === 'candidate') {
                         if (peerConnection && peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
-                            await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+                            try {
+                                await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+                                console.log("[ICE] Добавлен входящий кандидат");
+                            } catch (e) {
+                                console.error("[ICE] Ошибка добавления кандидата:", e);
+                            }
                         } else {
+                            // Если RemoteDescription еще нет, складываем в очередь
+                            console.log("[ICE] RemoteDescription еще нет, кандидат помещен в очередь");
                             iceCandidatesQueue.push(data.candidate);
                         }
-                    } else if (data.type === 'chat_message') {
-                        const msg = document.createElement('div');
-                        msg.className = 'msg-text';
-                        msg.innerHTML = `<strong>Собеседник:</strong> ${escapeHtml(data.text)}`;
-                        chatBody.appendChild(msg);
-                        chatBody.scrollTop = chatBody.scrollHeight;
-                    } else if (data.type === 'peer_disconnected') {
-                        addSystemMsg("Собеседник переключил чат.");
-                        cleanupPeerConnection();
-                        startTVNoise();
-                        remoteStatus.innerText = "Поиск следующего собеседника...";
-                        remoteStatus.style.display = 'block';
+                    } 
+                    else if (data.type === 'chat_message') {
+                        addMessage('Собеседник', data.text, false);
+                    } 
+                    else if (data.type === 'peer_disconnected') {
+                        console.log("[Signaling] Собеседник отключился.");
+                        addSystemMsg("Собеседник отключился.");
+                        cleanupPeerConnection(true);
                         
                         setTimeout(() => {
                             if (ws && ws.readyState === WebSocket.OPEN) {
                                 ws.send(JSON.stringify({ type: 'find_peer' }));
                             }
-                        }, 800);
+                        }, 500);
                     }
-                } catch (err) {}
+                } catch (err) {
+                    console.error("[WS] Ошибка разбора сообщения:", err);
+                }
             };
         }
-
         connectWebSocket();
 
-        function setupLocalStream(stream, mode) {
-            localStream = stream;
-            if (isMuted && localStream) {
-                localStream.getAudioTracks().forEach(t => t.enabled = false);
-            }
-
-            if (mode === 'video') {
-                if (currentFacingMode === 'user') {
-                    localVideo.classList.add('mirrored');
-                } else {
-                    localVideo.classList.remove('mirrored');
-                }
+        // === WEBRTC МЕДИА И ICE ===
+        async function initMedia() {
+            if (localStream) return;
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { ideal: currentFacingMode }, width: { ideal: 640 }, height: { ideal: 480 } },
+                    audio: { echoCancellation: true, noiseSuppression: true }
+                });
                 localVideo.srcObject = localStream;
                 localVideo.style.display = 'block';
                 localStatus.style.display = 'none';
-            } else if (mode === 'audio') {
-                localStatus.innerText = "Камера недоступна (только аудио)";
+                
+                // Если микрофон был замьючен до рестарта камеры
+                localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
+            } catch (err) {
+                console.error("[Media] Ошибка доступа к камере/микрофону:", err);
+                localStatus.innerText = "Камера/микрофон недоступны";
                 localStatus.style.display = 'block';
             }
         }
 
-        async function initMedia() {
-            mediaInitialized = true;
-
-            // Попытка 1: Камера + Микрофон (мягкий запрос)
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: { ideal: currentFacingMode } },
-                    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-                });
-                setupLocalStream(stream, 'video');
-                return;
-            } catch (err1) {
-                console.warn("Сбой видео+аудио, пробуем стандартные параметры...", err1);
-            }
-
-            // Попытка 2: Базовые параметры кадра без идеального режима
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                setupLocalStream(stream, 'video');
-                return;
-            } catch (err2) {
-                console.warn("Сбой камеры, пробуем только аудио...", err2);
-            }
-
-            // Попытка 3: Только микрофон
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: false, 
-                    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
-                });
-                setupLocalStream(stream, 'audio');
-                return;
-            } catch (err3) {
-                console.warn("Устройства недоступны. Переход в режим зрителя...", err3);
-            }
-
-            // Если устройств нет совсем или доступ заблокирован — включаем Режим Зрителя
-            localStatus.innerText = "Режим зрителя (камера/микрофон отключены)";
-            localStatus.style.display = 'block';
-            addSystemMsg("Внимание: Камера и микрофон недоступны. Вы находитесь в режиме зрителя (можете смотреть, слушать и писать сообщения).", "msg-system");
-        }
-
         function createPeerConnection() {
             if (peerConnection) return;
+            console.log("[WebRTC] Создание нового RTCPeerConnection");
             peerConnection = new RTCPeerConnection(configuration);
 
+            // Правильное добавление треков (addTrack)
             if (localStream) {
                 localStream.getTracks().forEach(track => {
                     peerConnection.addTrack(track, localStream);
                 });
             } else {
-                // Если нет своей камеры/микрофона — готовим соединения на прием
+                // Если нет устройств, добавляем Transceiver для получения медиа
                 peerConnection.addTransceiver('video', { direction: 'recvonly' });
                 peerConnection.addTransceiver('audio', { direction: 'recvonly' });
             }
 
+            // Обработчик входящего медиа
             peerConnection.ontrack = (event) => {
+                console.log("[WebRTC] Получен remote track:", event.track.kind);
+                
                 if (event.streams && event.streams[0]) {
                     remoteVideo.srcObject = event.streams[0];
-                    remoteVideo.style.display = 'block';
-                    stopTVNoise();
-                    remoteStatus.style.display = 'none';
-                    startNSFWCheck();
+                } else {
+                    const inboundStream = new MediaStream();
+                    inboundStream.addTrack(event.track);
+                    remoteVideo.srcObject = inboundStream;
                 }
+                
+                remoteVideo.style.display = 'block';
+                stopTVNoise();
+                remoteStatus.style.display = 'none';
+                networkWarning.style.display = 'none';
+
+                remoteVideo.play().catch(e => console.error("[Media] Ошибка воспроизведения remoteVideo:", e));
             };
 
             peerConnection.onicecandidate = (event) => {
-                if (event.candidate && ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ type: 'candidate', candidate: event.candidate }));
+                if (event.candidate) {
+                    // Вывод типа кандидата (host, srflx, relay) для диагностики
+                    const typeMatch = event.candidate.candidate.match(/typ ([a-z]+)/);
+                    console.log(`[ICE] Сгенерирован локальный кандидат (тип: ${typeMatch ? typeMatch[1] : 'unknown'})`);
+                    
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ type: 'candidate', candidate: event.candidate }));
+                    }
                 }
             };
 
-            let isRestarting = false;
-            peerConnection.onconnectionstatechange = async () => {
-                if (!peerConnection) return;
-                
-                if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
+            // ДИАГНОСТИКА СОСТОЯНИЙ
+            peerConnection.oniceconnectionstatechange = () => {
+                console.log("[State] ICE Connection:", peerConnection.iceConnectionState);
+                const state = peerConnection.iceConnectionState;
+
+                if (state === 'failed') {
+                    console.error("[State] ICE Connection FAILED (CGNAT/Ограничения сети). Попытка пересоздания...");
                     networkWarning.style.display = 'flex';
-                    
-                    if (!isRestarting && peerConnection.connectionState === 'failed') {
-                        isRestarting = true;
-                        try {
-                            const offer = await peerConnection.createOffer({ iceRestart: true });
-                            await peerConnection.setLocalDescription(offer);
-                            if (ws && ws.readyState === WebSocket.OPEN) {
-                                ws.send(JSON.stringify({ type: 'offer', offer: offer }));
-                            }
-                        } catch (e) {}
-                        setTimeout(() => { isRestarting = false; }, 4000);
-                    }
-                } else if (peerConnection.connectionState === 'connected') {
+                    // При failed полностью рвём соединение и ищем нового собеседника (самое надежное для рулетки)
+                    setTimeout(() => triggerSearch(), 1000); 
+                } else if (state === 'disconnected') {
+                    networkWarning.style.display = 'flex';
+                } else if (state === 'connected' || state === 'completed') {
                     networkWarning.style.display = 'none';
-                    isRestarting = false;
+                    startStatsPolling(); // Запуск проверки статистики для определения relay
                 }
             };
+
+            peerConnection.onconnectionstatechange = () => console.log("[State] Connection State:", peerConnection.connectionState);
+            peerConnection.onicegatheringstatechange = () => console.log("[State] ICE Gathering:", peerConnection.iceGatheringState);
         }
 
         async function processIceQueue() {
+            console.log(`[ICE] Обработка очереди кандидатов: ${iceCandidatesQueue.length} шт.`);
             while (iceCandidatesQueue.length > 0 && peerConnection && peerConnection.remoteDescription) {
                 const candidate = iceCandidatesQueue.shift();
                 try {
                     await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-                } catch (e) {}
+                } catch (e) {
+                    console.error("[ICE] Ошибка добавления кандидата из очереди:", e);
+                }
             }
         }
 
-        function cleanupPeerConnection() {
-            stopNSFWCheck();
+        // Диагностика использования Relay (TURN)
+        function startStatsPolling() {
+            if (statsInterval) clearInterval(statsInterval);
+            statsInterval = setInterval(async () => {
+                if (peerConnection && peerConnection.iceConnectionState === 'connected') {
+                    try {
+                        const stats = await peerConnection.getStats();
+                        stats.forEach(report => {
+                            if (report.type === 'candidate-pair' && report.state === 'succeeded' && report.nominated) {
+                                const local = stats.get(report.localCandidateId);
+                                const remote = stats.get(report.remoteCandidateId);
+                                console.log(`[Stats] Активная пара — Локал: ${local?.candidateType}, Ремоут: ${remote?.candidateType} (Протокол: ${local?.protocol})`);
+                                // Если local.candidateType === 'relay', значит 4G пробит через TURN!
+                            }
+                        });
+                    } catch (e) {
+                        console.error("[Stats] Ошибка getStats:", e);
+                    }
+                } else {
+                    clearInterval(statsInterval);
+                }
+            }, 5000);
+        }
+
+        function cleanupPeerConnection(resetUI = true) {
+            console.log("[WebRTC] Очистка PeerConnection...");
+            if (statsInterval) clearInterval(statsInterval);
             if (peerConnection) {
                 peerConnection.ontrack = null;
                 peerConnection.onicecandidate = null;
-                peerConnection.onconnectionstatechange = null;
+                peerConnection.oniceconnectionstatechange = null;
                 peerConnection.close();
                 peerConnection = null;
             }
-            remoteVideo.srcObject = null;
-            remoteVideo.style.display = 'none';
-            networkWarning.style.display = 'none';
-            nsfwBlurOverlay.style.display = 'none';
             iceCandidatesQueue = [];
+
+            if (resetUI) {
+                remoteVideo.srcObject = null;
+                remoteVideo.style.display = 'none';
+                networkWarning.style.display = 'none';
+                startTVNoise();
+                remoteStatus.innerText = "Поиск собеседника...";
+                remoteStatus.style.display = 'block';
+            }
         }
 
-        function addSystemMsg(text, type = 'system') {
+        // === УПРАВЛЕНИЕ UI ===
+        function addSystemMsg(text) {
             const msg = document.createElement('div');
-            msg.className = type === 'error' ? 'msg-error' : 'msg-system';
-            msg.innerText = text;
+            msg.className = 'msg-system'; msg.innerText = text;
             chatBody.appendChild(msg);
             chatBody.scrollTop = chatBody.scrollHeight;
         }
 
-        function escapeHtml(str) {
-            return str.replace(/[&<>"']/g, function(m) {
-                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m];
-            });
+        function addMessage(sender, text, isSelf) {
+            const msg = document.createElement('div');
+            msg.className = 'msg-text';
+            msg.innerHTML = `<strong>${isSelf ? 'Вы' : sender}:</strong> ${escapeHtml(text)}`;
+            chatBody.appendChild(msg);
+            chatBody.scrollTop = chatBody.scrollHeight;
         }
 
-        let isActionCooldown = false;
-
-        function triggerCooldown(duration = 1200) {
-            isActionCooldown = true;
-            nextBtn.disabled = true;
-            stopBtn.disabled = true;
-            setTimeout(() => {
-                isActionCooldown = false;
-                nextBtn.disabled = false;
-                stopBtn.disabled = false;
-            }, duration);
-        }
+        function escapeHtml(str) { return str.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m])); }
 
         async function triggerSearch() {
-            sessionStorage.setItem('chatex_active_session', 'true');
-
-            if (!mediaInitialized) {
-                await initMedia();
-            }
-            startTVNoise();
-            remoteStatus.innerText = "Поиск собеседника...";
-            remoteStatus.style.display = 'block';
-            cleanupPeerConnection();
+            await initMedia();
+            cleanupPeerConnection(true);
 
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'find_peer' }));
+            } else {
+                console.error("[WS] WebSocket не готов к поиску");
             }
-            addSystemMsg("Поиск нового собеседника...");
         }
 
-        nextBtn.addEventListener('click', () => {
-            if (isActionCooldown) return;
-            triggerCooldown();
-            triggerSearch();
-        });
+        document.getElementById('nextBtn').addEventListener('click', triggerSearch);
 
-        stopBtn.addEventListener('click', () => {
-            if (isActionCooldown) return;
-            triggerCooldown();
-
-            sessionStorage.removeItem('chatex_active_session');
-
-            cleanupPeerConnection();
+        document.getElementById('stopBtn').addEventListener('click', () => {
+            cleanupPeerConnection(true);
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'stop_search' }));
             }
-            startTVNoise();
             remoteStatus.innerText = "Поиск остановлен. Нажмите «НАЧАТЬ».";
-            remoteStatus.style.display = 'block';
-            addSystemMsg("Вы остановили общение.");
+            addSystemMsg("Вы остановили поиск.");
         });
 
-        muteBtn.addEventListener('click', () => {
+        document.getElementById('muteBtn').addEventListener('click', () => {
             isMuted = !isMuted;
-            if (localStream) {
-                localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
-            }
-            muteBtn.innerText = isMuted ? '🔇' : '🎙️';
-            muteBtn.style.background = isMuted ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.05)';
+            if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
+            document.getElementById('muteBtn').innerText = isMuted ? '🔇' : '🎙️';
         });
 
-        flipBtn.addEventListener('click', async () => {
+        document.getElementById('flipBtn').addEventListener('click', async () => {
             currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
-            if (localStream) {
-                localStream.getTracks().forEach(t => t.stop());
-            }
+            if (localStream) localStream.getTracks().forEach(t => t.stop());
+            localStream = null;
             await initMedia();
-            if (peerConnection && localStream) {
-                const senders = peerConnection.getSenders();
-                const videoTrack = localStream.getVideoTracks()[0];
-                const sender = senders.find(s => s.track && s.track.kind === 'video');
-                if (sender && videoTrack) {
-                    sender.replaceTrack(videoTrack);
-                }
-            }
+            // Если мы в звонке, нужно сделать renegotiation. Для рулетки проще отключить этот функционал во время звонка 
+            // или предупредить пользователя, что камера поменяется на следующей рулетке.
         });
-
-        let lastMsgTime = 0;
 
         function sendChatMessage() {
-            const now = Date.now();
-            if (now - lastMsgTime < 400) return;
-
-            const text = chatInput.value.trim().substring(0, 500);
+            const text = chatInput.value.trim();
             if (!text) return;
-            
-            lastMsgTime = now;
-
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'chat_message', text: text }));
             }
-
-            const msg = document.createElement('div');
-            msg.className = 'msg-text';
-            msg.innerHTML = `<strong>Вы:</strong> ${escapeHtml(text)}`;
-            chatBody.appendChild(msg);
-            chatBody.scrollTop = chatBody.scrollHeight;
+            addMessage('', text, true);
             chatInput.value = '';
         }
 
-        sendBtn.addEventListener('click', sendChatMessage);
-        chatInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') sendChatMessage();
-        });
-
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible') {
-                const isSessionActive = sessionStorage.getItem('chatex_active_session') === 'true';
-                
-                if (isSessionActive) {
-                    if (!peerConnection || peerConnection.connectionState !== 'connected') {
-                        addSystemMsg("Возврат в приложение. Проверка и поиск собеседника...");
-                        triggerSearch();
-                    }
-                }
-            }
-        });
-
-        window.addEventListener('beforeunload', () => {
-            cleanupPeerConnection();
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'stop_search' }));
-                ws.close();
-            }
-        });
+        document.getElementById('sendBtn').addEventListener('click', sendChatMessage);
+        chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChatMessage(); });
     </script>
 </body>
 </html>
