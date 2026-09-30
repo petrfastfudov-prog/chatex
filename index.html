@@ -259,7 +259,6 @@
             z-index: 1;
         }
 
-        /* Класс для эффекта зеркала фронталки */
         .mirrored {
             transform: scaleX(-1) !important;
             -webkit-transform: scaleX(-1) !important;
@@ -895,47 +894,67 @@
 
         connectWebSocket();
 
-        async function initMedia() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: currentFacingMode },
-                    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-                });
-                localStream = stream;
-                
-                if (isMuted) {
-                    localStream.getAudioTracks().forEach(t => t.enabled = false);
-                }
+        function setupLocalStream(stream, mode) {
+            localStream = stream;
+            if (isMuted && localStream) {
+                localStream.getAudioTracks().forEach(t => t.enabled = false);
+            }
 
+            if (mode === 'video') {
                 if (currentFacingMode === 'user') {
                     localVideo.classList.add('mirrored');
                 } else {
                     localVideo.classList.remove('mirrored');
                 }
-
                 localVideo.srcObject = localStream;
                 localVideo.style.display = 'block';
                 localStatus.style.display = 'none';
-                mediaInitialized = true;
-            } catch (err) {
-                try {
-                    const audioStream = await navigator.mediaDevices.getUserMedia({ 
-                        video: false, 
-                        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
-                    });
-                    localStream = audioStream;
-                    if (isMuted) {
-                        localStream.getAudioTracks().forEach(t => t.enabled = false);
-                    }
-                    localVideo.srcObject = localStream;
-                    localStatus.innerText = "Камера недоступна (только аудио)";
-                    localStatus.style.display = 'block';
-                    mediaInitialized = true;
-                } catch (e) {
-                    localStatus.innerText = "Ошибка доступа к камере и микрофону";
-                    addSystemMsg("Не удалось получить доступ к медиа-устройствам.", "error");
-                }
+            } else if (mode === 'audio') {
+                localStatus.innerText = "Камера недоступна (только аудио)";
+                localStatus.style.display = 'block';
             }
+        }
+
+        async function initMedia() {
+            mediaInitialized = true;
+
+            // Попытка 1: Камера + Микрофон (мягкий запрос)
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { ideal: currentFacingMode } },
+                    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+                });
+                setupLocalStream(stream, 'video');
+                return;
+            } catch (err1) {
+                console.warn("Сбой видео+аудио, пробуем стандартные параметры...", err1);
+            }
+
+            // Попытка 2: Базовые параметры кадра без идеального режима
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                setupLocalStream(stream, 'video');
+                return;
+            } catch (err2) {
+                console.warn("Сбой камеры, пробуем только аудио...", err2);
+            }
+
+            // Попытка 3: Только микрофон
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: false, 
+                    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
+                });
+                setupLocalStream(stream, 'audio');
+                return;
+            } catch (err3) {
+                console.warn("Устройства недоступны. Переход в режим зрителя...", err3);
+            }
+
+            // Если устройств нет совсем или доступ заблокирован — включаем Режим Зрителя
+            localStatus.innerText = "Режим зрителя (камера/микрофон отключены)";
+            localStatus.style.display = 'block';
+            addSystemMsg("Внимание: Камера и микрофон недоступны. Вы находитесь в режиме зрителя (можете смотреть, слушать и писать сообщения).", "msg-system");
         }
 
         function createPeerConnection() {
@@ -946,6 +965,10 @@
                 localStream.getTracks().forEach(track => {
                     peerConnection.addTrack(track, localStream);
                 });
+            } else {
+                // Если нет своей камеры/микрофона — готовим соединения на прием
+                peerConnection.addTransceiver('video', { direction: 'recvonly' });
+                peerConnection.addTransceiver('audio', { direction: 'recvonly' });
             }
 
             peerConnection.ontrack = (event) => {
